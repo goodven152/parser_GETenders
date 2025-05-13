@@ -258,10 +258,24 @@ def main(argv: Iterable[str] | None = None):
     parser.add_argument("--output", default="found_tenders.json", help="Path to save JSON result")
     parser.add_argument("--max-pages", type=int, help="Stop after N results pages")
     parser.add_argument("--no-headless", action="store_true", help="Run with visible browser window")
+    parser.add_argument(
+        "--reset-cache",                   # ← добавляем этот флаг
+        action="store_true",
+        help="Удалить visited_ids.txt перед началом работы",
+    )
     parser.add_argument("--log", default="INFO", help="Logging level")
     args = parser.parse_args(argv)
 
-    logging.basicConfig(level=getattr(logging, args.log.upper(), "INFO"), format="%(levelname)s: %(message)s")
+    # ← если указали --reset-cache, удаляем файл кеша
+    cache_file = Path("visited_ids.txt")
+    if args.reset_cache and cache_file.exists():
+        cache_file.unlink()
+        print("Cache reset: removed visited_ids.txt")
+
+    logging.basicConfig(
+        level=getattr(logging, args.log.upper(), "INFO"),
+        format="%(levelname)s: %(message)s"
+    )
 
     logging.info("Starting scrape…")
     try:
