@@ -140,65 +140,108 @@ def scrape_tenders(max_pages: int | None = None, headless: bool = True) -> List[
         driver = make_driver(headless=headless, download_dir=Path(tmpdir))
         driver.get(START_URL)
 
-        # 1. Apply the «Winner identified» status filter
+        # 1. Прокликиваем фильтры
         wait_click(driver, (By.ID, "app_donor_id"))
+        time.sleep(2)
         wait_click(driver, (By.XPATH, "//option[contains(., 'გამარჯვებული გამოვლენილია')]"))
+        time.sleep(1)
+
+        # 2. Жмём "ძიება" (Search)
         wait_click(driver, (By.ID, "search_btn"))  # "ძიება" button
+
+        # 3. Жмём "შედეგები" (Results)
         WebDriverWait(driver, 5).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "#tenders_tbl tbody tr"))
+            EC.presence_of_element_located((By.ID, "list_apps_by_subject"))
+        )
+        WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "#list_apps_by_subject tbody tr"))
         )
         page_num = 1
+        
+        # 2. Прокликиваем страницы с тендерами на странице 'page_num = n'
         while True:
             logging.info("Page %d", page_num)
             rows = driver.find_elements(By.CSS_SELECTOR, "#list_apps_by_subject tbody tr")
-            for row in tqdm(rows, desc=f"Page {page_num}"):
-                # заново докачиваем актуальный список
+            
+            for i in tqdm(range(len(rows)), desc=f"Page {page_num}"):
+                # Перезагружаем список, т.к. после назад элементы обновляются
                 rows = driver.find_elements(By.CSS_SELECTOR, "#list_apps_by_subject tbody tr")
-                row = rows[tqdm]
 
+                if i >= len(rows):
+                    break
 
-                tender_id = row.find_element(By.CSS_SELECTOR, "strong").text()
+                tender = rows[i]
+                tender_id = tender.find_element(By.CSS_SELECTOR, "p strong").text.strip()
+
                 if tender_id in visited:
                     continue
                 visited.add(tender_id)
 
-
-                # open row
-                row.find_element(By.CSS_SELECTOR, "a").send_keys(Keys.CONTROL + Keys.RETURN)
-                driver.switch_to.window(driver.window_handles[-1])
+                # Кликаем на тендер
+                tender.click()
 
                 try:
-                    # open "დოკუმენტაცია" tab
-                    wait_click(driver, (By.XPATH, "//a[contains(., 'დოკუმენტაცია')]") )
-                    # expand 1.3 section
-                    wait_click(driver, (By.XPATH, "//a[contains(., '1.3 ფასების ცხრილი')]") )
+                    WebDriverWait(driver, 30).until(
+                        EC.presence_of_element_located((By.XPATH, "//a[contains(., 'დოკუმენტაცია')]"))
+                    )
+
+                    # Открыть вкладку "დოკუმენტაცია"
+                    wait_click(driver, (By.XPATH, "//a[contains(., 'დოკუმენტაცია')]"))
+
+                    # Развернуть "1.3 ფასების ცხრილი"
+                    try:
+                        wait_click(driver, (By.XPATH, "//a[contains(., '1.3 ფასების ცხრილი')]"))
+                    except Exception:
+                        logging.warning("No section '1.3 ფასების ცხრილი' for tender %s", tender_id)
+
+                    # Скачать файлы
                     files = driver.find_elements(By.CSS_SELECTOR, "#docs_tbl a[target='_blank']")
                     for link in files:
                         href = link.get_attribute("href")
                         driver.execute_script("window.open(arguments[0]);", href)
                         driver.switch_to.window(driver.window_handles[-1])
-                        time.sleep(2)  # let download start
+                        time.sleep(2)  # дать время начать скачивание
                         driver.close()
-                        driver.switch_to.window(driver.window_handles[-1])
+                        driver.switch_to.window(driver.window_handles[0])
 
+                    found = False
                     for dl in Path(tmpdir).iterdir():
                         if file_contains_keywords(dl):
                             hits.append(tender_id)
+                            found = True
                             break
-                except Exception as exc:  # noqa: BLE001
-                    logging.warning("%s failed: %s", tender_id, exc)
-                finally:
-                    driver.close()
-                    driver.switch_to.window(driver.window_handles[0])
 
-            # pagination
+                    # Если совпадение не найдено — нажать кнопку назад
+                    if not found:
+                        wait_click(driver, (By.ID, "back_button_2"))
+                        WebDriverWait(driver, 30).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, "#list_apps_by_subject tbody tr"))
+                        )
+
+                except Exception as exc:
+                    logging.warning("%s failed: %s", tender_id, exc)
+                    try:
+                        # В случае ошибки тоже нажимаем "назад"
+                        wait_click(driver, (By.ID, "back_button_2"))
+                        WebDriverWait(driver, 30).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, "#list_apps_by_subject tbody tr"))
+                        )
+                    except Exception:
+                        logging.error("Failed to return after exception")
+
             if max_pages and page_num >= max_pages:
                 break
+
+            # Переход на следующую страницу
             try:
-                wait_click(driver, (By.ID, "btn_next"))  # next page button
+                wait_click(driver, (By.ID, "btn_next"))
                 page_num += 1
+
+                WebDriverWait(driver, 30).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "#list_apps_by_subject tbody tr"))
+                )
             except Exception:
-                break  # no more pages
+                break
 
         driver.quit()
 
