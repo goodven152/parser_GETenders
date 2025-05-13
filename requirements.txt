@@ -1,0 +1,13 @@
+selenium>=4.21.0              # browser automation
+webdriver-manager>=4.0.1      # auto‑downloads the matching chromedriver
+pdfminer.six>=20191110        # faster/more reliable PDF parsing
+PyYAML>=6.0                   # load keywords & settings from YAML config
+pandas>=2.2.2                 # tabular data handling / JSON export
+requests>=2.32.0              # fallback direct downloads (if Selenium fails)
+beautifulsoup4>=4.8.0       # HTML parsing helper
+lxml>=5.2.1                   # parser backend for BS4
+openpyxl>=3.1.2               # XLSX extraction (used by textract)
+python-docx>=1.0.1            # DOCX extraction (used by textract)
+tqdm>=4.66.2                  # progress bars for CLI feedback
+colorlog>=6.8.0               # coloured logging output (optional)
+textract>=1.6.5              # text extraction from PDFs
