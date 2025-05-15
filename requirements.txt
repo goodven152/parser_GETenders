@@ -11,3 +11,5 @@ python-docx>=1.0.1            # DOCX extraction (used by textract)
 tqdm>=4.66.2                  # progress bars for CLI feedback
 colorlog>=6.8.0               # coloured logging output (optional)
 textract>=1.6.5              # text extraction from PDFs
+python-slugify>=8.0.4           # slugify filenames
+pypdf>=5.5.0                  # PDF metadata extraction
