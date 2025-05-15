@@ -225,6 +225,14 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True) -> Li
                     with out_path.open("wb") as f:
                         for chunk in resp.iter_content(8192):
                             f.write(chunk)
+                    new_files = list(DOWNLOADS_DIR.iterdir())  # snapshot до очистки
+                    for fpath in new_files:
+                        if file_contains_keywords(fpath):
+                            hits.append(tender_id)
+                            break
+                    shutil.rmtree(DOWNLOADS_DIR)            # подчистили
+                    DOWNLOADS_DIR.mkdir(exist_ok=True)
+
 
                 # проверяем скачанные
                 for fpath in DOWNLOADS_DIR.iterdir():
