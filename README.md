@@ -1,3 +1,5 @@
+python -m venv venv
+source venv/Script/activate
 pip install -r -requirements.txt
 # PIP version needed 24
 python -m pip install "pip==24" 
