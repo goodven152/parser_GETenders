@@ -1,5 +1,7 @@
 START_URL = "https://tenders.procurement.gov.ge/public/?lang=ge"
 PAGE_ROWS = 4  # number of tenders shown at once after search
+FUZZY_THRESHOLD = 85
+USE_STANZA_LEMMAS = True
 KEYWORDS_GEO = [
     "თუჯის სარქველი",
     "ფლიანეცებს შორის მბრუნავი სარქველი",

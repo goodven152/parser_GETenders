@@ -5,3 +5,6 @@ pip install -r -requirements.txt
 python -m pip install "pip==24" 
 # Start the program:
 python -m ge_parser_tenders.cli --reset-cache --no-headless --max-pages [n]
+
+# первый запуск Stanza – скачиваем грузинскую модель
+python -c "import stanza; stanza.download('ka')"

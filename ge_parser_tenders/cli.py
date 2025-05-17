@@ -2,6 +2,7 @@ import argparse
 import logging
 import sys
 import json
+import requests
 from pathlib import Path
 from collections.abc import Iterable
 from .scraper import scrape_tenders

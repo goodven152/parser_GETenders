@@ -13,6 +13,7 @@ scraper.py ― грузинские тендеры
 
 from __future__ import annotations
 
+import requests
 import logging
 import mimetypes
 import shutil
@@ -23,7 +24,7 @@ from pathlib import Path
 from typing import List, Set
 from urllib.parse import unquote, urlparse
 
-import requests
+
 from slugify import slugify
 from tqdm import tqdm
 from selenium.webdriver.common.by import By
