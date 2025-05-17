@@ -15,6 +15,7 @@ import pandas as pd
 
 from .config import KEYWORDS_GEO, KEYWORDS_RE          # regex + список
 from .text_matcher import find_keyword_hits            # ← из вашего text_matcher.py
+from .ocr_image import extract_pdf_ocr
 
 DEFAULT_THRESHOLD = 80
 
@@ -37,17 +38,26 @@ def _xlsx_to_text(path: Path) -> str:
 def extract_text(file_path: Path) -> str:
     suf = file_path.suffix.lower()
     if suf == ".pdf":
+        text = ""
         try:                                         # 1) pypdf
             from pypdf import PdfReader
-            return "\n".join(
-                (p.extract_text() or "") for p in PdfReader(file_path).pages
-            )
-        except Exception:
-            pass
-        try:                                         # 2) poppler
-            return _pdf_to_text_poppler(file_path)
-        except Exception:
-            pass
+            text = "\n".join((p.extract_text() or "") for p in PdfReader(file_path).pages)
+            if len(text.strip()) >= 50:
+                return text
+            logging.debug("    pypdf дал мало текста (%d симв.) – пробуем дальше", len(text))
+        except Exception as exc:
+            logging.debug("    pypdf failed (%s) – пробуем дальше", exc)
+        try:                                         # 2)  poppler           
+            text = _pdf_to_text_poppler(file_path)
+            if len(text.strip()) >= 50:
+                return text
+            logging.debug("    poppler дал мало текста (%d симв.) – идём в OCR", len(text))
+        except Exception as exc:
+            logging.debug("    poppler failed (%s) – идём в OCR", exc)
+        try:                                         # 3)  tesseract-ocr
+            return extract_pdf_ocr(file_path)
+        except Exception as exc:
+            logging.warning("%s: OCR failed (%s)", file_path.name, exc)
 
     if suf in {".xls", ".xlsx"}:                     # Excel
         try:

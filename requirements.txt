@@ -15,3 +15,6 @@ pypdf>=5.5.0                  # PDF metadata extraction
 rapidfuzz>=2.0.0                # fuzzy string matching
 stanza>=0.14.0                 # for PDF text extraction
 xlrd>=0.26.0                  # XLSX extraction (used by textract)
+pdf2image>=1.16.3              # PDF to image conversion
+pillow>=9.0.0                 # image processing
+pytesseract>=0.3.10              # OCR for PDF text extraction
