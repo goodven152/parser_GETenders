@@ -13,7 +13,6 @@ scraper.py ― грузинские тендеры
 
 from __future__ import annotations
 
-import requests
 import logging
 import mimetypes
 import shutil
@@ -24,7 +23,7 @@ from pathlib import Path
 from typing import List, Set
 from urllib.parse import unquote, urlparse
 
-
+import requests
 from slugify import slugify
 from tqdm import tqdm
 from selenium.webdriver.common.by import By
@@ -238,7 +237,6 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True) -> Li
                 # проверяем скачанные
                 for fpath in DOWNLOADS_DIR.iterdir():
                     if file_contains_keywords(fpath):
-                        logging.info("  ✅ тендер %s содержит ключи", tender_id)
                         hits.append(tender_id)
                         break
 
