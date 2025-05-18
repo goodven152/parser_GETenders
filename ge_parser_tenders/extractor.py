@@ -85,9 +85,9 @@ def file_contains_keywords(
 
     text = extract_text(file_path)
     if not text.strip():
-        logging.debug("    пустой/не распознан")
+        logging.info("    пустой/не распознан")
         return False
-    logging.debug("    извлечено %d символов", len(text))
+    logging.info("    извлечено %d символов", len(text))
 
     # ── быстрый префильтр regex ― резко сокращает количество fuzzy-сравнений
     if not KEYWORDS_RE.search(text):
