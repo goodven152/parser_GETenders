@@ -1,45 +1,55 @@
+from __future__ import annotations
+
 """
 scraper.py ― грузинские тендеры
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * проходит по страницам сайта, кликает «დოკუმენტაცია»
 * скачивает все прикреплённые файлы
-* даёт им читаемые ASCII-имена (slug-ified), чтобы внешние CLI-утилиты
-  вроде *pdftotext* не спотыкались о юникод-пути
+* даёт им читаемые ASCII‑имена (slug‑ified), чтобы внешние CLI‑утилиты
+  вроде *pdftotext* не спотыкались о юникод‑пути
 * ищет в документах ключевые слова и сохраняет ID тендера,
   если хотя бы один файл «срабатывает»
 
+ВЕРСИЯ 2025‑05‑18
+----------------
+• Исправлена навигация по страницам: кнопка «Next» иногда не срабатывала,
+  из‑за чего парсер обрабатывал только первую страницу. Теперь мы ждём
+  обновления таблицы через EC.staleness_of и проверяем, что кнопка не
+  отключена.
 """
-
-from __future__ import annotations
 
 import logging
 import mimetypes
+import re
 import shutil
 import tempfile
 import time
-import re
 from pathlib import Path
 from typing import List, Set
 from urllib.parse import unquote, urlparse
 
 import requests
-from slugify import slugify
-from tqdm import tqdm
-from selenium.webdriver.common.by import By
+from selenium.common.exceptions import (
+    ElementNotInteractableException,
+    StaleElementReferenceException,
+    TimeoutException,
+)
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from slugify import slugify
+from tqdm import tqdm
 
 from .config import START_URL
 from .driver_utils import make_driver, wait_click
 from .extractor import file_contains_keywords
 
-# --------------------------------------------------------------------------- #
-#                               helpers                                       #
-# --------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------
+#                               helpers
+# ---------------------------------------------------------------------------
 
-# ── имя из Content-Disposition ───────────────────────────────────────────────
 _CD_FILENAME_RX = re.compile(
     r"""filename\*?          # filename или filename*
         (?:=[^']*'')?        # =utf-8''  (может отсутствовать)
@@ -51,10 +61,7 @@ _CD_FILENAME_RX = re.compile(
 
 
 def _decode_maybe_utf8(s: str) -> str:
-    """
-    Сервер прислал UTF-8, но заголовок трекнулся как Latin-1.
-    Пример: '=áá…'  →  'დანართი …'
-    """
+    """Попытка декодировать заголовок, пришедший битым UTF‑8."""
     try:
         return s.encode("latin1").decode("utf-8")
     except UnicodeDecodeError:
@@ -65,14 +72,14 @@ def _filename_from_cd(cd: str | None) -> str | None:
     if not cd:
         return None
 
-    # RFC 5987 ―  filename*=utf-8''%E1%83%93%E1%83%90…
+    # RFC 5987 — filename*=utf-8''%E1%83%93%E1%83%90…
     if "filename*" in cd:
         _, value = cd.split("filename*", 1)[1].split("=", 1)
         if "''" in value:
             enc, _, raw = value.partition("''")
             return unquote(raw, encoding=enc, errors="replace")
 
-    # filename="დანართი.pdf"  (может быть уже «битым» UTF-8)
+    # filename="დანართი.pdf"
     m = _CD_FILENAME_RX.search(cd)
     if m:
         name = m["name"].strip().strip('"')
@@ -81,7 +88,6 @@ def _filename_from_cd(cd: str | None) -> str | None:
     return None
 
 
-# ── расширение по Content-Type ───────────────────────────────────────────────
 _CT_EXT_MAP = {
     "application/pdf": ".pdf",
     "application/msword": ".doc",
@@ -100,14 +106,9 @@ def _ext_from_content_type(ct: str | None) -> str:
     return mimetypes.guess_extension(ct) or _CT_EXT_MAP.get(ct, "")
 
 
-# ── безопасное ASCII-имя + уникальность ─────────────────────────────────────
+# ── безопасное ASCII‑имя + уникальность ────────────────────────────────
+
 def _safe_filename(raw: str, ext_hint: str = "") -> str:
-    """
-    Возвращает «ASCII-дружественное» имя:
-      • slugify → латиница/цифры/_
-      • пробелы → _
-      • если slug пустой, кладём «file»
-    """
     stem, ext = Path(raw).stem, Path(raw).suffix or ext_hint
     slug = slugify(stem, lowercase=False, separator="_")
     if not slug:
@@ -116,7 +117,6 @@ def _safe_filename(raw: str, ext_hint: str = "") -> str:
 
 
 def _unique(path: Path) -> Path:
-    """file.pdf → file_1.pdf, file_2.pdf … если уже существует"""
     if not path.exists():
         return path
     stem, ext = path.stem, path.suffix
@@ -128,13 +128,66 @@ def _unique(path: Path) -> Path:
         idx += 1
 
 
-# --------------------------------------------------------------------------- #
-#                               main scraper                                  #
-# --------------------------------------------------------------------------- #
+# ── пагинация ──────────────────────────────────────────────────────────
+
+def _has_next_page(driver) -> bool:
+    """Return True if the «Next» button is enabled."""
+    try:
+        next_btn = driver.find_element(By.ID, "btn_next")
+        disabled = (
+            not next_btn.is_enabled()
+            or "ui-state-disabled" in next_btn.get_attribute("class" or "")
+            or next_btn.get_attribute("disabled")
+        )
+        return not disabled
+    except Exception:
+        return False
+
+
+def _next_page(driver, timeout: int = 30):
+    """Click «Next» and wait for the table to refresh."""
+    if not _has_next_page(driver):
+        raise StopIteration("no next page")
+
+    pager = driver.find_element(By.CSS_SELECTOR, ".pager")
+    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", pager)
+    next_btn = driver.find_element(By.ID, "btn_next")
+
+    # save reference to the first row — we'll wait until it's stale
+    first_row = driver.find_element(By.CSS_SELECTOR, "#list_apps_by_subject tbody tr")
+
+    driver.execute_script("arguments[0].click();", next_btn)
+
+    # wait until previous rows become stale → table was rebuilt
+    WebDriverWait(driver, timeout).until(EC.staleness_of(first_row))
+    # …and new rows appear
+    WebDriverWait(driver, timeout).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "#list_apps_by_subject tbody tr"))
+    )
+
+
+# ── безопасный клик по строке ──────────────────────────────────────────
+
+def safe_click(driver, element, retries: int = 3):
+    for _ in range(retries):
+        try:
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", element)
+            WebDriverWait(driver, 10).until(lambda d: element.is_displayed() and element.is_enabled())
+            element.click()
+            return
+        except (StaleElementReferenceException, ElementNotInteractableException):
+            time.sleep(0.5)
+    # финальная попытка – JavaScript‑клик
+    driver.execute_script("arguments[0].click();", element)
+
+
+# ---------------------------------------------------------------------------
+#                               main scraper
+# ---------------------------------------------------------------------------
+
 def scrape_tenders(max_pages: int | None = None, *, headless: bool = True) -> List[str]:
-    """
-    Возвращает список ID тендеров, в чьих документах найдены ключевые слова.
-    """
+    """Возвращает список ID тендеров, в чьих документах найдены ключевые слова."""
+
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     DOWNLOADS_DIR = Path("downloads")
@@ -147,24 +200,23 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True) -> Li
     hits: List[str] = []
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        # браузер
         driver = make_driver(headless=headless, download_dir=Path(tmpdir))
         driver.get(START_URL)
 
         root = "{uri.scheme}://{uri.netloc}".format(uri=urlparse(START_URL))
 
-        # сессия с cookie браузера
+        # скопируем cookie в requests.Session → экономим авторизацию
         session = requests.Session()
         for c in driver.get_cookies():
             session.cookies.set(c["name"], c["value"])
 
-        # фильтр «გამარჯვებული გამოვლენილია» (= победитель определён)
+        # фильтр «გამარჯვებული გამოვლენილია» (победитель определён)
         wait_click(driver, (By.ID, "app_donor_id"))
         time.sleep(2)
         wait_click(driver, (By.XPATH, "//option[contains(., 'გამარჯვებული გამოვლენილია')]"))
         time.sleep(1)
         wait_click(driver, (By.ID, "search_btn"))
-        WebDriverWait(driver, 5).until(
+        WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "#list_apps_by_subject tbody tr"))
         )
 
@@ -184,13 +236,9 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True) -> Li
                     continue
                 visited.add(tender_id)
 
-                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", tender_row)
-                try:
-                    tender_row.click()
-                except Exception:
-                    ActionChains(driver).move_to_element(tender_row).click().perform()
+                safe_click(driver, tender_row)
 
-                # ссылка «დოკუმენტაცია»
+                # «დოკუმენტაცია»
                 WebDriverWait(driver, 30).until(
                     EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'დოკუმენტაცია')]"))
                 )
@@ -213,32 +261,25 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True) -> Li
                         logging.warning("    ⚠ не скачан %s (%s)", url, exc)
                         continue
 
-                    # имя + расширение
                     cd_name = _filename_from_cd(resp.headers.get("Content-Disposition"))
                     name = cd_name or link.text.strip() or href.split("file=")[-1]
                     if "." not in Path(name).name:
                         name += _ext_from_content_type(resp.headers.get("Content-Type"))
 
-                    safe_name = _safe_filename(name)
-                    out_path = _unique(DOWNLOADS_DIR / safe_name)
+                    out_path = _unique(DOWNLOADS_DIR / _safe_filename(name))
 
                     with out_path.open("wb") as f:
                         for chunk in resp.iter_content(8192):
                             f.write(chunk)
-                    new_files = list(DOWNLOADS_DIR.iterdir())  # snapshot до очистки
-                    for fpath in new_files:
-                        if file_contains_keywords(fpath):
-                            hits.append(tender_id)
-                            break
-                    shutil.rmtree(DOWNLOADS_DIR)            # подчистили
-                    DOWNLOADS_DIR.mkdir(exist_ok=True)
 
-
-                # проверяем скачанные
-                for fpath in DOWNLOADS_DIR.iterdir():
-                    if file_contains_keywords(fpath):
+                    if file_contains_keywords(out_path):
                         hits.append(tender_id)
+                        # если нашли хотя бы 1 файл — остальные можно не смотреть
                         break
+
+                # очистка временных файлов перед следующим тендером
+                shutil.rmtree(DOWNLOADS_DIR)
+                DOWNLOADS_DIR.mkdir(exist_ok=True)
 
                 # назад к списку
                 wait_click(driver, (By.ID, "back_button_2"))
@@ -246,15 +287,13 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True) -> Li
                     EC.presence_of_element_located((By.CSS_SELECTOR, "#list_apps_by_subject tbody tr"))
                 )
 
+            # --- переход на следующую страницу --------------------------------
             if max_pages and page >= max_pages:
                 break
             try:
-                wait_click(driver, (By.ID, "btn_next"))
+                _next_page(driver)
                 page += 1
-                WebDriverWait(driver, 30).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "#list_apps_by_subject tbody tr"))
-                )
-            except Exception:
+            except (TimeoutException, StopIteration):
                 break
 
         driver.quit()
@@ -264,5 +303,4 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True) -> Li
 
 
 if __name__ == "__main__":
-    # пример запуска: python scraper.py  -- отладка без CLI-обёртки
     print(scrape_tenders(max_pages=1, headless=False))
