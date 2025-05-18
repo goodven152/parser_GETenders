@@ -248,17 +248,23 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True) -> Li
                     EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.answ-file a"))
                 )
                 links = driver.find_elements(By.CSS_SELECTOR, "div.answ-file a")
-                logging.info("  ↳ найдено %d вложений", len(links))
+                logging.info("  Найдено %d вложений", len(links))
 
                 for link in links:
                     href = link.get_attribute("href")
                     url = href if href.startswith("http") else f"{root}/{href.lstrip('/')}"
 
+                    display_name = (link.text.strip()
+                                    or href.split("file=")[-1]
+                                    or Path(url).name)
+                    
+                    logging.info("  Скачиваем %s …", display_name)
+
                     try:
                         resp = session.get(url, stream=True, timeout=60)
                         resp.raise_for_status()
                     except Exception as exc:
-                        logging.warning("    ⚠ не скачан %s (%s)", url, exc)
+                        logging.warning("   Не скачан %s (%s)", url, exc)
                         continue
 
                     cd_name = _filename_from_cd(resp.headers.get("Content-Disposition"))

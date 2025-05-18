@@ -81,22 +81,23 @@ def file_contains_keywords(
     (fuzzy-score ≥ *threshold*).  Пишет подробный лог, повторяя
     поведение `keyword_tester.py`.
     """
-    logging.info("🔍 Сканируем %s", file_path.name)
+    logging.info("  Сканируем %s", file_path.name)
 
     text = extract_text(file_path)
     if not text.strip():
-        logging.info("    пустой/не распознан")
+        logging.info("  пустой/не распознан")
         return False
-    logging.info("    извлечено %d символов", len(text))
+    logging.info("  Извлечено %d символов", len(text))
+    logging.info("  Начинаем поиск ключевых слов…")
 
     # ── быстрый префильтр regex ― резко сокращает количество fuzzy-сравнений
     if not KEYWORDS_RE.search(text):
-        logging.debug("    regex промахнулся — переходим к fuzzy + леммам")
+        logging.debug("  regex промахнулся — переходим к fuzzy + леммам")
     else:
-        logging.debug("    ⚡ regex совпал — уточняем fuzzy-скор")
+        logging.debug(" regex совпал — уточняем fuzzy-скор")
 
     hits = find_keyword_hits(text, KEYWORDS_GEO, threshold=threshold)
-    logging.info("    найдено %d ключевых слов (≥%d)", len(hits), threshold)
+    logging.info("  Найдено %d ключевых слов (≥%d)", len(hits), threshold)
 
     # детальный список (DEBUG-уровень)
     if hits and logging.getLogger().isEnabledFor(logging.DEBUG):
