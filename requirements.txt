@@ -1,12 +1,20 @@
-selenium>=4.21.0              # browser automation
-webdriver-manager>=4.0.1      # auto‑downloads the matching chromedriver
-pandas>=2.2.2                 # tabular data handling / JSON export
-requests>=2.32.0              # fallback direct downloads (if Selenium fails)
-tqdm>=4.66.2                  # progress bars for CLI feedback
-python-slugify>=8.0.4           # slugify filenames
-pypdf>=5.5.0                  # PDF metadata extraction
-rapidfuzz>=2.0.0                # fuzzy string matching
-stanza>=0.14.0                 # for PDF text extraction
-pdf2image>=1.16.3              # PDF to image conversion
-pillow>=9.0.0                 # image processing
-pytesseract>=0.3.10              # OCR for PDF text extraction
+# web-driver
+selenium>=4.21.0
+webdriver-manager>=4.0.1
+# work with pdf files
+pytesseract>=0.3.10
+pillow>=9.0.0
+pdf2image>=1.16.3
+pypdf>=5.5.0
+# work with xlsx/lsx files
+openpyxl>=3.1.2
+xlrd>=2.0.1
+# fuzzy-/NLP
+rapidfuzz>=2.0.0
+stanza>=0.14.0
+# table analysis
+pandas>=2.2.2
+# web scraping
+requests>=2.32.0
+tqdm>=4.66.2
+python-slugify>=8.0.4
