@@ -42,7 +42,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from slugify import slugify
 from tqdm import tqdm
 
-from .config import START_URL
+
+from .config import ParserSettings
+
 from .driver_utils import make_driver, wait_click
 from .extractor import file_contains_keywords
 
@@ -185,7 +187,7 @@ def safe_click(driver, element, retries: int = 3):
 #                               main scraper
 # ---------------------------------------------------------------------------
 
-def scrape_tenders(max_pages: int | None = None, *, headless: bool = True) -> List[str]:
+def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, settings: ParserSettings,) -> List[str]:
     """Возвращает список ID тендеров, в чьих документах найдены ключевые слова."""
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -201,9 +203,9 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True) -> Li
 
     with tempfile.TemporaryDirectory() as tmpdir:
         driver = make_driver(headless=headless, download_dir=Path(tmpdir))
-        driver.get(START_URL)
+        driver.get(str(settings.start_url))               # ← cast to str
 
-        root = "{uri.scheme}://{uri.netloc}".format(uri=urlparse(START_URL))
+        root = "{uri.scheme}://{uri.netloc}".format(uri=urlparse(str(settings.start_url)))
 
         # скопируем cookie в requests.Session → экономим авторизацию
         session = requests.Session()
@@ -278,7 +280,7 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True) -> Li
                         for chunk in resp.iter_content(8192):
                             f.write(chunk)
 
-                    if file_contains_keywords(out_path):
+                    if file_contains_keywords(out_path, settings=settings):
                         hits.append(tender_id)
                         # если нашли хотя бы 1 файл — остальные можно не смотреть
                         break

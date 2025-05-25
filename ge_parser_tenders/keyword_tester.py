@@ -31,8 +31,11 @@ import stanza
 #  Import project helpers (relative, because script lives inside the package)
 # ---------------------------------------------------------------------------
 
+
+from .config import ParserSettings
+settings = ParserSettings.load()
 from .extractor import extract_text  # type: ignore  # noqa: E402
-from .config import KEYWORDS_GEO      # type: ignore  # noqa: E402
+     # type: ignore  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -97,13 +100,13 @@ def main(argv: list[str] | None = None) -> None:
     text_norm = _normalise_whitespace(text)
     logging.debug("Original text length: %d characters", len(text_norm))
 
-    direct_hits = _fuzzy_hits(KEYWORDS_GEO, text_norm, args.threshold)
+    direct_hits = _fuzzy_hits(settings.keywords_geo, text_norm, args.threshold)
     logging.info("Direct match: %d hits", len(direct_hits))
 
     lemma_hits: dict[str, int] = {}
     lemma_text = _build_lemma_text(text_norm)
     if lemma_text:
-        lemma_hits = _fuzzy_hits(KEYWORDS_GEO, lemma_text, args.threshold)
+        lemma_hits = _fuzzy_hits(settings.keywords_geo, lemma_text, args.threshold)
         logging.info("Lemma match:  %d hits", len(lemma_hits))
 
     hits = {**direct_hits}
