@@ -10,10 +10,10 @@ from pathlib import Path
 import logging
 import shlex
 from subprocess import run, PIPE
-
+import re
 import pandas as pd
 
-from .config import KEYWORDS_GEO, KEYWORDS_RE          # regex + список
+from .config import ParserSettings       # regex + список
 from .text_matcher import find_keyword_hits            # ← из вашего text_matcher.py
 from .ocr_image import extract_pdf_ocr
 
@@ -73,6 +73,7 @@ def extract_text(file_path: Path) -> str:
 # --------------------------------------------------------------------------- #
 def file_contains_keywords(
     file_path: Path,
+    settings: ParserSettings,
     *,
     threshold: int = DEFAULT_THRESHOLD,
 ) -> bool:
@@ -91,12 +92,12 @@ def file_contains_keywords(
     logging.info("  Начинаем поиск ключевых слов…")
 
     # ── быстрый префильтр regex ― резко сокращает количество fuzzy-сравнений
-    if not KEYWORDS_RE.search(text):
+    if not re.compile("|".join(map(re.escape, settings.keywords_geo)), flags=re.I).search(text):
         logging.debug("  regex промахнулся — переходим к fuzzy + леммам")
     else:
         logging.debug(" regex совпал — уточняем fuzzy-скор")
 
-    hits = find_keyword_hits(text, KEYWORDS_GEO, threshold=threshold)
+    hits = find_keyword_hits(text, settings.keywords_geo, threshold=threshold)
     logging.info("  Найдено %d ключевых слов (≥%d)\n", len(hits), threshold)
 
     # детальный список (DEBUG-уровень)

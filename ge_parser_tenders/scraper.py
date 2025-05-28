@@ -39,12 +39,21 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.remote.webelement import WebElement
 from slugify import slugify
 from tqdm import tqdm
 
-from .config import START_URL
+
+from .config import ParserSettings
+
 from .driver_utils import make_driver, wait_click
 from .extractor import file_contains_keywords
+
+# ---------------------------------------------------------------------------
+#   Фильтр компаний, которых следует исключать
+# ---------------------------------------------------------------------------
+
+
 
 # ---------------------------------------------------------------------------
 #                               helpers
@@ -185,7 +194,7 @@ def safe_click(driver, element, retries: int = 3):
 #                               main scraper
 # ---------------------------------------------------------------------------
 
-def scrape_tenders(max_pages: int | None = None, *, headless: bool = True) -> List[str]:
+def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, settings: ParserSettings,) -> List[str]:
     """Возвращает список ID тендеров, в чьих документах найдены ключевые слова."""
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -201,9 +210,9 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True) -> Li
 
     with tempfile.TemporaryDirectory() as tmpdir:
         driver = make_driver(headless=headless, download_dir=Path(tmpdir))
-        driver.get(START_URL)
+        driver.get(str(settings.start_url))               # ← cast to str
 
-        root = "{uri.scheme}://{uri.netloc}".format(uri=urlparse(START_URL))
+        root = "{uri.scheme}://{uri.netloc}".format(uri=urlparse(str(settings.start_url)))
 
         # скопируем cookie в requests.Session → экономим авторизацию
         session = requests.Session()
@@ -237,6 +246,36 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True) -> Li
                 visited.add(tender_id)
 
                 safe_click(driver, tender_row)
+                # ―――――― Проверка кандидатов на вкладке «შეთავაზებები» ―――――――
+                try:
+                    wait_click(driver, (By.XPATH, "//a[contains(., 'შეთავაზებები')]"))
+                    WebDriverWait(driver, 10).until(
+                        EC.presence_of_all_elements_located(
+                            (By.CSS_SELECTOR, "#app_bids table.ktable tbody tr")
+                        )
+                    )
+                    cand_cells: list[WebElement] = driver.find_elements(
+                        By.CSS_SELECTOR,
+                        "#app_bids table.ktable tbody tr td:nth-child(1)",
+                    )
+                    candidates: list[str] = [c.text.strip() for c in cand_cells if c.text.strip()]
+                    firm_found = any(settings.excluded_firm in c for c in candidates)
+                    logging.info(
+                        "Найденные кандидаты: %s. Кандидата შპს ,,ინგი-77 %s",
+                        ", ".join(candidates) or "—",
+                        "найден" if firm_found else "не найдено",
+                    )
+                    if firm_found:
+                        # назад и пропускаем тендер
+                        wait_click(driver, (By.ID, "back_button_2"))
+                        WebDriverWait(driver, 30).until(
+                            EC.presence_of_element_located(
+                                (By.CSS_SELECTOR, "#list_apps_by_subject tbody tr")
+                            )
+                        )
+                        continue
+                except Exception as exc:
+                    logging.warning("Не удалось получить список кандидатов (%s) – продолжаем", exc)
 
                 # «დოკუმენტაცია»
                 WebDriverWait(driver, 30).until(
@@ -278,7 +317,7 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True) -> Li
                         for chunk in resp.iter_content(8192):
                             f.write(chunk)
 
-                    if file_contains_keywords(out_path):
+                    if file_contains_keywords(out_path, settings=settings):
                         hits.append(tender_id)
                         # если нашли хотя бы 1 файл — остальные можно не смотреть
                         break
