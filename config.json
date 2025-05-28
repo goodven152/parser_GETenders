@@ -13,8 +13,9 @@
         "დანისებრი სარქველი"
     ],
     "output": "found_tenders.json",
-    "max_pages": 2,
+    "max_pages": 30,
     "headless": true,
     "reset_cache": false,
-    "log": "INFO"
+    "log": "INFO",
+    "EXCLUDED_FIRM": "ინგი-77"
 }

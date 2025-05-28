@@ -9,11 +9,13 @@ class ParserSettings(BaseSettings):
     fuzzy_threshold: int = Field(85, alias="FUZZY_THRESHOLD")
     use_stanza_lemmas: bool = Field(True, alias="USE_STANZA_LEMMAS")
     keywords_geo: list[str] = Field(..., alias="KEYWORDS_GEO")
+    excluded_firm: str = Field(..., alias="EXCLUDED_FIRM")
     output: str = "found_tenders.json"
     max_pages: Optional[int] = None          # None → все страницы
     headless: bool = True                    # True = headless Chrome
     reset_cache: bool = False
     log: str = "INFO"
+    
 
     @classmethod
     def load(cls, path: str | Path = "config.json") -> "ParserSettings":
