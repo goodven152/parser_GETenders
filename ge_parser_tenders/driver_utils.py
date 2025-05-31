@@ -11,6 +11,8 @@ from selenium.common.exceptions import TimeoutException, WebDriverException
 def make_driver(headless: bool = True, download_dir: Path | None = None) -> webdriver.Chrome:
     opts = webdriver.ChromeOptions()
     if headless:
+        opts.add_argument("--no-sandbox")
+        opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--headless=new")
         opts.add_argument("--disable-gpu")
     opts.add_argument("--window-size=1920,1080")
