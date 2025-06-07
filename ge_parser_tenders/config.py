@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime
 from pydantic_settings import BaseSettings
 from pydantic import HttpUrl, Field
 from typing import Optional
@@ -15,8 +16,10 @@ class ParserSettings(BaseSettings):
     headless: bool = True                    # True = headless Chrome
     reset_cache: bool = False
     log: str = "INFO"
-    
+    started_at: datetime | None = None
+    model_config = {"extra": "ignore"}
 
     @classmethod
     def load(cls, path: str | Path = "config.json") -> "ParserSettings":
+        from pathlib import Path
         return cls.model_validate_json(Path(path).read_bytes())
