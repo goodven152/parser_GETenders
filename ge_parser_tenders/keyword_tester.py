@@ -1,22 +1,8 @@
+# keyword_tester.py
 """
-keyword_tester.py
-~~~~~~~~~~~~~~~~~
-Утилита для локальной проверки любых документов на наличие «запрещённых»
-или просто заданных ключевых слов.
-
-Примеры запуска
----------------
-
-# 1. Проверить файл(ы) c ключевыми словами из config.json
-$ python keyword_tester.py docs/დანართი.xlsx another.pdf
-
-# 2. То же, но задать слова вручную
-$ python keyword_tester.py sample.docx --kw "სარქველი,ურდული"
-
-Вывод
------
-HIT <имя_файла>  – найдено хотя бы одно слово
-OK  <имя_файла>  – слов нет
+Проверка любых документов на ключевые слова.
+$ python keyword_tester.py путь/к/файлу1.xlsx [файл2.pdf ...]
+$ python keyword_tester.py sample.docx --kw "სარქველი,ურდুলি"
 """
 
 from __future__ import annotations
@@ -25,56 +11,40 @@ import argparse
 from pathlib import Path
 from typing import List
 
-from ge_parser_tenders.config import settings          # ключевые из конфига
+from ge_parser_tenders.config import settings
 from ge_parser_tenders.extractor import file_contains_keywords
 
-# ──────────────────────────── helpers ────────────────────────────
 
-
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Проверка документов на наличие ключевых слов."
-    )
-    parser.add_argument(
-        "files",
-        nargs="+",
-        type=Path,
-        help="Путь(и) к файлам (Excel, PDF, DOCX и т.д.)",
-    )
-    parser.add_argument(
+def _args() -> argparse.Namespace:
+    p = argparse.ArgumentParser()
+    p.add_argument("files", nargs="+", type=Path, help="Документы для проверки")
+    p.add_argument(
         "--kw",
-        metavar="WORDS",
-        help='Ключевые слова через запятую (например: "სარქველი,ურდული"). '
-        "Если не указано — используются слова из config.json",
+        help="Слова через запятую; если не задано — берём из config.json",
     )
-    return parser.parse_args()
+    return p.parse_args()
 
 
-def _load_keywords(custom_kw: str | None) -> List[str]:
-    """Возвращает список ключевых слов для поиска."""
-    if custom_kw:
-        return [k.strip() for k in custom_kw.split(",") if k.strip()]
+def _load_kw(raw: str | None) -> List[str]:
+    if raw:
+        return [w.strip() for w in raw.split(",") if w.strip()]
     return settings.keywords_geo
 
 
-# ──────────────────────────── main ───────────────────────────────
-
-
 def main() -> None:
-    args = _parse_args()
-    keywords = _load_keywords(args.kw)
+    args = _args()
+    kw = _load_kw(args.kw)
 
-    if not keywords:
-        raise SystemExit("❌ Нет ключевых слов для поиска (список пуст).")
+    if not kw:
+        raise SystemExit("❌ нет ключевых слов для поиска")
 
-    for file_path in args.files:
-        if not file_path.exists():
-            print(f"⚠️  {file_path} — файл не найден")
+    for f in args.files:
+        if not f.exists():
+            print(f"⚠️  {f} — файл не найден")
             continue
 
-        hit = file_contains_keywords(file_path, keywords)
-        status = "HIT" if hit else "OK "
-        print(f"{status}  {file_path.name}")
+        hit = file_contains_keywords(f, kw)
+        print(f'{"HIT" if hit else "OK "}  {f.name}')
 
 
 if __name__ == "__main__":

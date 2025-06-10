@@ -1,6 +1,5 @@
 # web-driver
 selenium>=4.21.0
-webdriver-manager>=4.0.1
 # work with pdf files
 pytesseract>=0.3.10
 pillow>=9.0.0
