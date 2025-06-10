@@ -261,7 +261,7 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                     candidates: list[str] = [c.text.strip() for c in cand_cells if c.text.strip()]
                     firm_found = any(settings.excluded_firm in c for c in candidates)
                     logging.info(
-                        "   Найденные кандидаты: %s. Кандидата შპს ,,ინგი-77 %s",
+                        "Найденные кандидаты: %s. Кандидата შპს ,,ინგი-77 %s",
                         ", ".join(candidates) or "—",
                         "найден" if firm_found else "не найдено",
                     )
