@@ -2,6 +2,7 @@
 from __future__ import annotations
 from pathlib import Path
 import logging
+from .text_utils import has_keyword
 from rapidfuzz import fuzz
     
 import stanza
@@ -20,6 +21,10 @@ try:
 except Exception as exc:           # нет модели — работаем без лемм
     logging.warning("Stanza disabled: %s", exc)
     _NLP = None
+
+# ── Step 0: строгий поиск целых слов ───────────────────────────
+if has_keyword(text, keywords):
+    return True
 
 def _lemma(text: str) -> str:
     if _NLP is None:
