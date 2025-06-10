@@ -1,50 +1,124 @@
-# keyword_tester.py
+#!/usr/bin/env python3
 """
-Проверка любых документов на ключевые слова.
-$ python keyword_tester.py путь/к/файлу1.xlsx [файл2.pdf ...]
-$ python keyword_tester.py sample.docx --kw "სარქველი,ურდুলি"
-"""
+    keyword_tester.py — standalone / in‑package utility to test keyword detection
+    in a single document using fuzzy‑matching (RapidFuzz) and optional lemma
+    support via Stanza.
 
+    How to run (from project root):
+        # as a module, so relative imports work
+        python -m ge_parser_tenders.keyword_tester path/to/file.pdf \
+               --threshold 85 --log DEBUG
+
+    If you prefer to install the package:
+        pip install -e .
+        keyword_tester path/to/file.pdf
+
+    Requirements:
+        pip install rapidfuzz stanza
+        python -c "import stanza; stanza.download('ka')"  # once, models
+"""
 from __future__ import annotations
 
 import argparse
+import logging
+import sys
 from pathlib import Path
-from typing import List
 
-from ge_parser_tenders.config import settings
-from ge_parser_tenders.extractor import file_contains_keywords
+from rapidfuzz import fuzz
+import stanza
 
-
-def _args() -> argparse.Namespace:
-    p = argparse.ArgumentParser()
-    p.add_argument("files", nargs="+", type=Path, help="Документы для проверки")
-    p.add_argument(
-        "--kw",
-        help="Слова через запятую; если не задано — берём из config.json",
-    )
-    return p.parse_args()
+# ---------------------------------------------------------------------------
+#  Import project helpers (relative, because script lives inside the package)
+# ---------------------------------------------------------------------------
 
 
-def _load_kw(raw: str | None) -> List[str]:
-    if raw:
-        return [w.strip() for w in raw.split(",") if w.strip()]
-    return settings.keywords_geo
+from .config import ParserSettings
+settings = ParserSettings.load()
+from .extractor import extract_text  # type: ignore  # noqa: E402
+     # type: ignore  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+
+def _normalise_whitespace(text: str) -> str:
+    """Collapse runs of whitespace → single spaces."""
+    return " ".join(text.split())
 
 
-def main() -> None:
-    args = _args()
-    kw = _load_kw(args.kw)
+def _build_lemma_text(text: str) -> str:
+    """Return lemma‑level representation of *text* using Stanza (Georgian)."""
+    try:
+        nlp = stanza.Pipeline(
+            "ka",
+            processors="tokenize,pos,lemma",
+            tokenize_no_ssplit=True,
+            use_gpu=False,
+            logging_level="WARN",
+        )
+    except Exception as exc:
+        logging.warning("Stanza initialisation failed (%s). Lemma matching disabled.", exc)
+        return ""
 
-    if not kw:
-        raise SystemExit("❌ нет ключевых слов для поиска")
+    doc = nlp(text)
+    lemmas: list[str] = []
+    for sentence in doc.sentences:
+        lemmas.extend(word.lemma or word.text for word in sentence.words)
+    return " ".join(lemmas)
 
-    for f in args.files:
-        if not f.exists():
-            print(f"⚠️  {f} — файл не найден")
-            continue
 
-        hit = file_contains_keywords(f, kw)
-        print(f'{"HIT" if hit else "OK "}  {f.name}')
+def _fuzzy_hits(keywords: list[str], haystack: str, threshold: int) -> dict[str, int]:
+    """Return dict(keyword → best_score) for scores >= *threshold*."""
+    results: dict[str, int] = {}
+    for kw in keywords:
+        score = fuzz.partial_ratio(kw, haystack)
+        if score >= threshold:
+            results[kw] = score
+    return results
+
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Georgian keyword fuzzy‑tester")
+    parser.add_argument("file", type=Path, help="Document (.pdf/.xlsx/.docx …)")
+    parser.add_argument("--threshold", type=int, default=80, help="Similarity cutoff 0‑100")
+    parser.add_argument("--log", default="INFO", help="Logging level (DEBUG/INFO)")
+    args = parser.parse_args(argv)
+
+    logging.basicConfig(level=getattr(logging, args.log.upper(), "INFO"),
+                        format="%(levelname)s: %(message)s")
+
+    logging.info("Scanning %s", args.file)
+    text = extract_text(args.file)
+    if not text.strip():
+        logging.error("No text extracted — aborting.")
+        sys.exit(2)
+
+    text_norm = _normalise_whitespace(text)
+    logging.debug("Original text length: %d characters", len(text_norm))
+
+    direct_hits = _fuzzy_hits(settings.keywords_geo, text_norm, args.threshold)
+    logging.info("Direct match: %d hits", len(direct_hits))
+
+    lemma_hits: dict[str, int] = {}
+    lemma_text = _build_lemma_text(text_norm)
+    if lemma_text:
+        lemma_hits = _fuzzy_hits(settings.keywords_geo, lemma_text, args.threshold)
+        logging.info("Lemma match:  %d hits", len(lemma_hits))
+
+    hits = {**direct_hits}
+    for kw, score in lemma_hits.items():
+        hits[kw] = max(score, hits.get(kw, 0))
+
+    if hits:
+        logging.info("\nFound keywords (threshold=%d):", args.threshold)
+        for kw, score in sorted(hits.items(), key=lambda t: -t[1]):
+            print(f"{kw:<60} score={score}")
+    else:
+        logging.info("No keywords found (threshold=%d)", args.threshold)
 
 
 if __name__ == "__main__":
