@@ -13,6 +13,7 @@ from subprocess import run, PIPE
 import re
 import pandas as pd
 
+from .text_utils import has_keyword
 from .config import ParserSettings       # regex + список
 from .text_matcher import find_keyword_hits            # ← из вашего text_matcher.py
 from .ocr_image import extract_pdf_ocr
@@ -91,11 +92,13 @@ def file_contains_keywords(
     logging.info("  Извлечено %d символов", len(text))
     logging.info("  Начинаем поиск ключевых слов…")
 
-    # ── быстрый префильтр regex ― резко сокращает количество fuzzy-сравнений
-    if not re.compile("|".join(map(re.escape, settings.keywords_geo)), flags=re.I).search(text):
-        logging.debug("  regex промахнулся — переходим к fuzzy + леммам")
-    else:
-        logging.debug(" regex совпал — уточняем fuzzy-скор")
+    # # ── быстрый префильтр regex ― резко сокращает количество fuzzy-сравнений
+    # if not re.compile("|".join(map(re.escape, settings.keywords_geo)), flags=re.I).search(text):
+    #     logging.debug("  regex промахнулся — переходим к fuzzy + леммам")
+    # else:
+    #     logging.debug(" regex совпал — уточняем fuzzy-скор")
+    if not has_keyword(text, settings.keywords_geo):
+        logging.debug(" has_keyword промахнулся — переходим к fuzzy + леммам")
 
     hits = find_keyword_hits(text, settings.keywords_geo, threshold=threshold)
     logging.info("  Найдено %d ключевых слов (≥%d)\n", len(hits), threshold)

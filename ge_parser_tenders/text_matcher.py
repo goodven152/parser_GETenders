@@ -55,14 +55,24 @@ def find_keyword_hits(
         text: str,
         keywords: list[str],
         *,
-        threshold: int = 80,
+        threshold: int = 90,
         ) -> dict[str, int]:
     
+    # norm = _norm(text)
+    # direct = {kw: fuzz.partial_ratio(kw, norm)
+    #           for kw in keywords
+    #           if fuzz.partial_ratio(kw, norm) >= threshold}
+    +    from .text_utils import has_keyword
     norm = _norm(text)
+
+    # быстрая строгая проверка
+    if not has_keyword(norm, keywords):
+        return {}
+
     direct = {kw: fuzz.partial_ratio(kw, norm)
               for kw in keywords
               if fuzz.partial_ratio(kw, norm) >= threshold}
-    
+
     lemma = _lemma(norm)
     lemma_hits = {}
     if lemma:
