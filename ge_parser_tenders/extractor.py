@@ -97,7 +97,12 @@ def file_contains_keywords(
     else:
         logging.debug(" regex совпал — уточняем fuzzy-скор")
 
-    hits = find_keyword_hits(text, settings.keywords_geo, threshold=threshold)
+    # hits = find_keyword_hits(text, settings.keywords_geo, threshold=threshold)
+    hits = find_keyword_hits(
+        text,
+        settings.keywords_geo,
+        threshold=settings.fuzzy_threshold,
+    )
     logging.info("  Найдено %d ключевых слов (≥%d)\n", len(hits), threshold)
 
     # детальный список (DEBUG-уровень)

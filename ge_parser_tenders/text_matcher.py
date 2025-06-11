@@ -6,6 +6,8 @@ from rapidfuzz import fuzz
     
 import stanza
 
+GE_RANGE = "ა-ჰ"
+
 __all__ = ["contains_keywords"]
 
 # --- инициализация Stanza (однократно) ------------------------------
@@ -21,6 +23,7 @@ except Exception as exc:           # нет модели — работаем б
     logging.warning("Stanza disabled: %s", exc)
     _NLP = None
 
+
 def _lemma(text: str) -> str:
     if _NLP is None:
         return ""
@@ -29,9 +32,17 @@ def _lemma(text: str) -> str:
 
 def _norm(text: str) -> str:
     return " ".join(text.split())
+    
+def _regex_word(word: str) -> re.Pattern:
+    return re.compile(rf"(?<![{GE_RANGE}]){re.escape(word)}(?![{GE_RANGE}])", re.I)
+
+def _score(kw: str, haystack: str) -> int:
+    if " " in kw:                          # фраза ≥ 2 слов
+        return fuzz.ratio(kw, haystack)    # строгий scorer
+    return 100 if _regex_word(kw).search(haystack) else 0
 
 def _hits(keywords: list[str], haystack: str, threshold: int) -> bool:
-    return any(fuzz.partial_ratio(kw, haystack) >= threshold for kw in keywords)
+    return any(_score(kw, haystack) >= threshold for kw in keywords)
 
 # public ------------------------------------------------------------------
 def contains_keywords(text: str, keywords: list[str], *, threshold: int = 80) -> bool:
