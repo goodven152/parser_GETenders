@@ -63,7 +63,7 @@ def _hits(keywords: List[str], haystack: str, threshold: int) -> Dict[str, int]:
 
 
 # ────────────────── public API ──────────────────
-def contains_keywords(text: str, keywords: List[str], *, threshold: int = 80) -> bool:
+def contains_keywords(text: str, keywords: List[str], *, threshold: int) -> bool:
     """True, если найдено ≥ 1 ключа (строгий алгоритм + леммы)."""
     norm = _norm(text)
     if _hits(keywords, norm, threshold):
@@ -76,7 +76,7 @@ def find_keyword_hits(
     text: str,
     keywords: List[str],
     *,
-    threshold: int = 80,
+    threshold: int,
 ) -> Dict[str, int]:
     """Вернуть dict {keyword: score} — на строгом алгоритме (без partial_ratio)."""
     norm = _norm(text)
