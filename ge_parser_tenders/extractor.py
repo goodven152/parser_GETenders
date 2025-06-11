@@ -103,7 +103,8 @@ def file_contains_keywords(
         settings.keywords_geo,
         threshold=settings.fuzzy_threshold,
     )
-    logging.info("  Найдено %d ключевых слов (≥%d)\n", len(hits), threshold)
+    logging.info(" Найдено %d ключевых слов (≥%d)\n",
+             len(hits), settings.fuzzy_threshold)
 
     # детальный список (DEBUG-уровень)
     if hits and logging.getLogger().isEnabledFor(logging.DEBUG):
