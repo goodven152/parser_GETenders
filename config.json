@@ -13,6 +13,5 @@
   "headless": true,
   "reset_cache": true,
   "log": "INFO",
-  "EXCLUDED_FIRM": "ინგი-77",
-  "TEST_CONST": true
+  "EXCLUDED_FIRM": "ინგი-77"
 }
