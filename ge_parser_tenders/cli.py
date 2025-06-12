@@ -71,7 +71,7 @@ def main(argv: Iterable[str] | None = None):
         format="%(levelname)s: %(message)s",
     )
 
-    logging.info("Starting scrape…")
+    logging.info("Starting scraperrrrrrrrrrrrrrrr…")
     try:
         ids = scrape_tenders(max_pages=max_pages, headless=headless, settings=settings)
     except KeyboardInterrupt:
