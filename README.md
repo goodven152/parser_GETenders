@@ -15,3 +15,6 @@ python -m ge_parser_tenders.cli --config config.json
 # первый запуск Stanza – скачиваем грузинскую модель
 
 python -c "import stanza; stanza.download('ka')"
+
+# Для проверки документа локально
+python -m ge_parser_tenders.keyword_tester way/to/path.xlsx

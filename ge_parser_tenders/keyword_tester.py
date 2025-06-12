@@ -84,7 +84,7 @@ def _fuzzy_hits(keywords: list[str], haystack: str, threshold: int) -> dict[str,
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Georgian keyword fuzzy‑tester")
     parser.add_argument("file", type=Path, help="Document (.pdf/.xlsx/.docx …)")
-    parser.add_argument("--threshold", type=int, default=80, help="Similarity cutoff 0‑100")
+    parser.add_argument("--threshold", type=int,help="Similarity cutoff 0-100 ""(по умолчанию из config.json)")
     parser.add_argument("--log", default="INFO", help="Logging level (DEBUG/INFO)")
     args = parser.parse_args(argv)
 
@@ -100,13 +100,14 @@ def main(argv: list[str] | None = None) -> None:
     text_norm = _normalise_whitespace(text)
     logging.debug("Original text length: %d characters", len(text_norm))
 
-    direct_hits = _fuzzy_hits(settings.keywords_geo, text_norm, args.threshold)
-    logging.info("Direct match: %d hits", len(direct_hits))
+    thresh = args.threshold or settings.fuzzy_threshold
+    direct_hits = _fuzzy_hits(settings.keywords_geo, text_norm, thresh)
+    logging.info("Direct match: %d hits (≥%d)", len(direct_hits), thresh)
 
     lemma_hits: dict[str, int] = {}
     lemma_text = _build_lemma_text(text_norm)
     if lemma_text:
-        lemma_hits = _fuzzy_hits(settings.keywords_geo, lemma_text, args.threshold)
+        lemma_hits = _fuzzy_hits(settings.keywords_geo, lemma_text, thresh)
         logging.info("Lemma match:  %d hits", len(lemma_hits))
 
     hits = {**direct_hits}
@@ -114,11 +115,11 @@ def main(argv: list[str] | None = None) -> None:
         hits[kw] = max(score, hits.get(kw, 0))
 
     if hits:
-        logging.info("\nFound keywords (threshold=%d):", args.threshold)
+        logging.info("\nFound keywords (threshold=%d):", thresh)
         for kw, score in sorted(hits.items(), key=lambda t: -t[1]):
             print(f"{kw:<60} score={score}")
     else:
-        logging.info("No keywords found (threshold=%d)", args.threshold)
+        logging.info("No keywords found (threshold=%d)", thresh)
 
 
 if __name__ == "__main__":
