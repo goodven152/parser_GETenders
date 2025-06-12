@@ -27,7 +27,7 @@ def make_driver(headless: bool = True, download_dir: Path | None = None) -> webd
     opts.add_experimental_option("prefs", prefs)
 
     # driver_path = ChromeDriverManager().install()
-    # service = Service(driver_path)
+    service = Service('/usr/bin/chromedriver')
     driver = webdriver.Chrome(options=opts)
     # driver = webdriver.Chrome(service=service, options=opts)
     driver.set_page_load_timeout(60)
