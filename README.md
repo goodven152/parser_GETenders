@@ -18,3 +18,5 @@ python -c "import stanza; stanza.download('ka')"
 
 # Для проверки документа локально
 python -m ge_parser_tenders.keyword_tester way/to/path.xlsx
+
+test
