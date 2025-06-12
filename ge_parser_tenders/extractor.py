@@ -17,7 +17,6 @@ from .config import ParserSettings       # regex + список
 from .text_matcher import find_keyword_hits            # ← из вашего text_matcher.py
 from .ocr_image import extract_pdf_ocr
 
-DEFAULT_THRESHOLD = 80
 
 
 # --------------------------------------------------------------------------- #
@@ -75,7 +74,7 @@ def file_contains_keywords(
     file_path: Path,
     settings: ParserSettings,
     *,
-    threshold: int = DEFAULT_THRESHOLD,
+    threshold: int | None = None,
 ) -> bool:
     """
     Возвращает True, если в документе ≥ одно ключевое слово
@@ -97,8 +96,10 @@ def file_contains_keywords(
     else:
         logging.debug(" regex совпал — уточняем fuzzy-скор")
 
-    hits = find_keyword_hits(text, settings.keywords_geo, threshold=threshold)
-    logging.info("  Найдено %d ключевых слов (≥%d)\n", len(hits), threshold)
+    # ── fuzzy-поиск ключевых слов
+    thresh = threshold or settings.fuzzy_threshold
+    hits = find_keyword_hits(text, settings.keywords_geo, threshold=thresh)
+    logging.info(" Найдено %d ключевых слов (≥%d)\n", len(hits), thresh)
 
     # детальный список (DEBUG-уровень)
     if hits and logging.getLogger().isEnabledFor(logging.DEBUG):
