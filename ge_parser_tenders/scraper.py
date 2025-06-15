@@ -210,105 +210,106 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
     hits: List[str] = []
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        driver = make_driver(headless=headless, download_dir=Path(tmpdir))
-        driver.get(str(settings.start_url))               # ← cast to str
+        try:
+            driver = make_driver(headless=headless, download_dir=Path(tmpdir))
+            driver.get(str(settings.start_url))               # ← cast to str
 
-        root = "{uri.scheme}://{uri.netloc}".format(uri=urlparse(str(settings.start_url)))
+            root = "{uri.scheme}://{uri.netloc}".format(uri=urlparse(str(settings.start_url)))
 
-        # скопируем cookie в requests.Session → экономим авторизацию
-        session = requests.Session()
-        for c in driver.get_cookies():
-            session.cookies.set(c["name"], c["value"])
+            # скопируем cookie в requests.Session → экономим авторизацию
+            session = requests.Session()
+            for c in driver.get_cookies():
+                session.cookies.set(c["name"], c["value"])
 
-        # фильтр «გამარჯვებული გამოვლენილია» (победитель определён)
-        wait_click(driver, (By.ID, "app_donor_id"))
-        time.sleep(2)
-        wait_click(driver, (By.XPATH, "//option[contains(., 'გამარჯვებული გამოვლენილია')]"))
-        time.sleep(1)
-        wait_click(driver, (By.ID, "search_btn"))
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "#list_apps_by_subject tbody tr"))
-        )
+            # фильтр «გამარჯვებული გამოვლენილია» (победитель определён)
+            wait_click(driver, (By.ID, "app_donor_id"))
+            time.sleep(2)
+            wait_click(driver, (By.XPATH, "//option[contains(., 'გამარჯვებული გამოვლენილია')]"))
+            time.sleep(1)
+            wait_click(driver, (By.ID, "search_btn"))
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#list_apps_by_subject tbody tr"))
+            )
 
-        page = 1
-        while True:
-            logging.info("Page %d", page)
-            rows = driver.find_elements(By.CSS_SELECTOR, "#list_apps_by_subject tbody tr")
-
-            for idx in tqdm(range(len(rows)), desc=f"Page {page}", unit="tender"):
+            page = 1
+            while True:
+                logging.info("Page %d", page)
                 rows = driver.find_elements(By.CSS_SELECTOR, "#list_apps_by_subject tbody tr")
-                if idx >= len(rows):
-                    break
 
-                tender_row = rows[idx]
-                tender_id = tender_row.find_element(By.CSS_SELECTOR, "p strong").text.strip()
-                if tender_id in visited:
-                    continue
-                visited.add(tender_id)
+                for idx in tqdm(range(len(rows)), desc=f"Page {page}", unit="tender"):
+                    rows = driver.find_elements(By.CSS_SELECTOR, "#list_apps_by_subject tbody tr")
+                    if idx >= len(rows):
+                        break
 
-                safe_click(driver, tender_row)
-                # ―――――― Проверка кандидатов на вкладке «შეთავაზებები» ―――――――
-                try:
-                    wait_click(driver, (By.XPATH, "//a[contains(., 'შეთავაზებები')]"))
-                    WebDriverWait(driver, 10).until(
-                        EC.presence_of_all_elements_located(
-                            (By.CSS_SELECTOR, "#app_bids table.ktable tbody tr")
-                        )
-                    )
-                    cand_cells: list[WebElement] = driver.find_elements(
-                        By.CSS_SELECTOR,
-                        "#app_bids table.ktable tbody tr td:nth-child(1)",
-                    )
-                    candidates: list[str] = [c.text.strip() for c in cand_cells if c.text.strip()]
-                    firm_found = any(settings.excluded_firm in c for c in candidates)
-                    logging.info(
-                        "   Найденные кандидаты: %s. Кандидата შპს ,,ინგი-77 %s",
-                        ", ".join(candidates) or "—",
-                        "найден" if firm_found else "не найдено",
-                    )
-                    if firm_found:
-                        # назад и пропускаем тендер
-                        wait_click(driver, (By.ID, "back_button_2"))
-                        WebDriverWait(driver, 30).until(
-                            EC.presence_of_element_located(
-                                (By.CSS_SELECTOR, "#list_apps_by_subject tbody tr")
+                    tender_row = rows[idx]
+                    tender_id = tender_row.find_element(By.CSS_SELECTOR, "p strong").text.strip()
+                    if tender_id in visited:
+                        continue
+                    visited.add(tender_id)
+
+                    safe_click(driver, tender_row)
+                    # ―――――― Проверка кандидатов на вкладке «შეთავაზებები» ―――――――
+                    try:
+                        wait_click(driver, (By.XPATH, "//a[contains(., 'შეთავაზებები')]"))
+                        WebDriverWait(driver, 10).until(
+                            EC.presence_of_all_elements_located(
+                                (By.CSS_SELECTOR, "#app_bids table.ktable tbody tr")
                             )
                         )
-                        continue
-                except Exception as exc:
-                    logging.warning("Не удалось получить список кандидатов (%s) – продолжаем", exc)
+                        cand_cells: list[WebElement] = driver.find_elements(
+                            By.CSS_SELECTOR,
+                            "#app_bids table.ktable tbody tr td:nth-child(1)",
+                        )
+                        candidates: list[str] = [c.text.strip() for c in cand_cells if c.text.strip()]
+                        firm_found = any(settings.excluded_firm in c for c in candidates)
+                        logging.info(
+                            "   Найденные кандидаты: %s. Кандидата შპს ,,ინგი-77 %s",
+                            ", ".join(candidates) or "—",
+                            "найден" if firm_found else "не найдено",
+                        )
+                        if firm_found:
+                            # назад и пропускаем тендер
+                            wait_click(driver, (By.ID, "back_button_2"))
+                            WebDriverWait(driver, 30).until(
+                                EC.presence_of_element_located(
+                                    (By.CSS_SELECTOR, "#list_apps_by_subject tbody tr")
+                                )
+                            )
+                            continue
+                    except Exception as exc:
+                        logging.warning("Не удалось получить список кандидатов (%s) – продолжаем", exc)
 
-                # «დოკუმენტაცია»
-                WebDriverWait(driver, 30).until(
-                    EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'დოკუმენტაცია')]"))
-                )
-                wait_click(driver, (By.XPATH, "//a[contains(., 'დოკუმენტაცია')]"))
+                    # «დოკუმენტაცია»
+                    WebDriverWait(driver, 30).until(
+                        EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'დოკუმენტაცია')]"))
+                    )
+                    wait_click(driver, (By.XPATH, "//a[contains(., 'დოკუმენტაცია')]"))
 
-                WebDriverWait(driver, 10).until(
-                    EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.answ-file a"))
-                )
-                links = driver.find_elements(By.CSS_SELECTOR, "div.answ-file a")
-                logging.info("  Найдено %d вложений", len(links))
+                    WebDriverWait(driver, 10).until(
+                        EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.answ-file a"))
+                    )
+                    links = driver.find_elements(By.CSS_SELECTOR, "div.answ-file a")
+                    logging.info("  Найдено %d вложений", len(links))
 
 
 
-                for link in links:
-                    href = link.get_attribute("href")
-                    url = href if href.startswith("http") else f"{root}/{href.lstrip('/')}"
+                    for link in links:
+                        href = link.get_attribute("href")
+                        url = href if href.startswith("http") else f"{root}/{href.lstrip('/')}"
 
-                    display_name = (link.text.strip() or href.split("file=")[-1] or Path(url).name)
-                    logging.info("  Скачиваем %s …", display_name)
-                    
-                    for attempt in range(3):  # 3 попытки скачивания
-                        try:
-                            resp = session.get(url, stream=True, timeout=30)
-                            resp.raise_for_status()
-                            break
-                        except Exception as exc:
-                            if attempt == 2:
-                                logging.warning(f"Не скачан {url} после 3 попыток: {exc}")
-                                continue
-                            time.sleep(5 * (attempt + 1))
+                        display_name = (link.text.strip() or href.split("file=")[-1] or Path(url).name)
+                        logging.info("  Скачиваем %s …", display_name)
+
+                        for attempt in range(3):  # 3 попытки скачивания
+                            try:
+                                resp = session.get(url, stream=True, timeout=30)
+                                resp.raise_for_status()
+                                break
+                            except Exception as exc:
+                                if attempt == 2:
+                                    logging.warning(f"Не скачан {url} после 3 попыток: {exc}")
+                                    continue
+                                time.sleep(5 * (attempt + 1))
                     # try:
                     #     resp = session.get(url, stream=True, timeout=60)
                     #     resp.raise_for_status()
@@ -316,42 +317,43 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                     #     logging.warning("   Не скачан %s (%s)", url, exc)
                     #     continue
 
-                    cd_name = _filename_from_cd(resp.headers.get("Content-Disposition"))
-                    name = cd_name or link.text.strip() or href.split("file=")[-1]
-                    if "." not in Path(name).name:
-                        name += _ext_from_content_type(resp.headers.get("Content-Type"))
+                        cd_name = _filename_from_cd(resp.headers.get("Content-Disposition"))
+                        name = cd_name or link.text.strip() or href.split("file=")[-1]
+                        if "." not in Path(name).name:
+                            name += _ext_from_content_type(resp.headers.get("Content-Type"))
 
-                    out_path = _unique(DOWNLOADS_DIR / _safe_filename(name))
+                        out_path = _unique(DOWNLOADS_DIR / _safe_filename(name))
 
-                    with out_path.open("wb") as f:
-                        for chunk in resp.iter_content(8192):
-                            f.write(chunk)
+                        with out_path.open("wb") as f:
+                            for chunk in resp.iter_content(8192):
+                                f.write(chunk)
 
-                    if file_contains_keywords(out_path, settings=settings):
-                        hits.append(tender_id)
-                        # если нашли хотя бы 1 файл — остальные можно не смотреть
-                        break
+                        if file_contains_keywords(out_path, settings=settings):
+                            hits.append(tender_id)
+                            # если нашли хотя бы 1 файл — остальные можно не смотреть
+                            break
 
-                # очистка временных файлов перед следующим тендером
-                shutil.rmtree(DOWNLOADS_DIR)
-                DOWNLOADS_DIR.mkdir(exist_ok=True)
+                    # очистка временных файлов перед следующим тендером
+                    shutil.rmtree(DOWNLOADS_DIR)
+                    DOWNLOADS_DIR.mkdir(exist_ok=True)
 
-                # назад к списку
-                wait_click(driver, (By.ID, "back_button_2"))
-                WebDriverWait(driver, 30).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "#list_apps_by_subject tbody tr"))
-                )
+                    # назад к списку
+                    wait_click(driver, (By.ID, "back_button_2"))
+                    WebDriverWait(driver, 30).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "#list_apps_by_subject tbody tr"))
+                    )
 
-            # --- переход на следующую страницу --------------------------------
-            if max_pages and page >= max_pages:
-                break
-            try:
-                _next_page(driver)
-                page += 1
-            except (TimeoutException, StopIteration):
-                break
-
-        driver.quit()
+                # --- переход на следующую страницу --------------------------------
+                if max_pages and page >= max_pages:
+                    break
+                try:
+                    _next_page(driver)
+                    page += 1
+                except (TimeoutException, StopIteration):
+                    break
+        finally:
+            if 'driver' in locals():
+                driver.quit()
 
     cache_path.write_text("\n".join(sorted(visited)))
     return hits

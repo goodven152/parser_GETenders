@@ -12,6 +12,7 @@ import shlex
 from subprocess import run, PIPE
 import re
 import pandas as pd
+from pypdf import PdfReader
 
 from .config import ParserSettings       # regex + список
 from .text_matcher import find_keyword_hits            # ← из вашего text_matcher.py
@@ -41,7 +42,6 @@ def extract_text(file_path: Path) -> str:
     if suf == ".pdf":
         text = ""
         try:                                         # 1) pypdf
-            from pypdf import PdfReader
             text = "\n".join((p.extract_text() or "") for p in PdfReader(file_path).pages)
             if len(text.strip()) >= 50:
                 return text
@@ -84,8 +84,11 @@ def file_contains_keywords(
     поведение `keyword_tester.py`.
     """
     logging.info("  Сканируем %s", file_path.name)
-
-    text = extract_text(file_path)
+    try:
+        text = extract_text(file_path)
+    except Exception as exc:
+        logging.error("  Ошибка при извлечении текста: %s", exc)
+        return ""
     if not text.strip():
         logging.info("  пустой/не распознан")
         return False
