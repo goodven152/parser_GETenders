@@ -25,6 +25,7 @@ import re
 import shutil
 import tempfile
 import time
+import socket
 from pathlib import Path
 from typing import List, Set
 from urllib.parse import unquote, urlparse
@@ -58,7 +59,7 @@ from .extractor import file_contains_keywords
 # ---------------------------------------------------------------------------
 #                               helpers
 # ---------------------------------------------------------------------------
-
+socket.setdefaulttimeout(60)
 _CD_FILENAME_RX = re.compile(
     r"""filename\*?          # filename или filename*
         (?:=[^']*'')?        # =utf-8''  (может отсутствовать)
@@ -289,22 +290,31 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                 links = driver.find_elements(By.CSS_SELECTOR, "div.answ-file a")
                 logging.info("  Найдено %d вложений", len(links))
 
+
+
                 for link in links:
                     href = link.get_attribute("href")
                     url = href if href.startswith("http") else f"{root}/{href.lstrip('/')}"
 
-                    display_name = (link.text.strip()
-                                    or href.split("file=")[-1]
-                                    or Path(url).name)
-                    
+                    display_name = (link.text.strip() or href.split("file=")[-1] or Path(url).name)
                     logging.info("  Скачиваем %s …", display_name)
-
-                    try:
-                        resp = session.get(url, stream=True, timeout=60)
-                        resp.raise_for_status()
-                    except Exception as exc:
-                        logging.warning("   Не скачан %s (%s)", url, exc)
-                        continue
+                    
+                    for attempt in range(3):  # 3 попытки скачивания
+                        try:
+                            resp = session.get(url, stream=True, timeout=30)
+                            resp.raise_for_status()
+                            break
+                        except Exception as exc:
+                            if attempt == 2:
+                                logging.warning(f"Не скачан {url} после 3 попыток: {exc}")
+                                continue
+                            time.sleep(5 * (attempt + 1))
+                    # try:
+                    #     resp = session.get(url, stream=True, timeout=60)
+                    #     resp.raise_for_status()
+                    # except Exception as exc:
+                    #     logging.warning("   Не скачан %s (%s)", url, exc)
+                    #     continue
 
                     cd_name = _filename_from_cd(resp.headers.get("Content-Disposition"))
                     name = cd_name or link.text.strip() or href.split("file=")[-1]

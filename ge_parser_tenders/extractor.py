@@ -35,6 +35,8 @@ def _xlsx_to_text(path: Path) -> str:
 
 
 def extract_text(file_path: Path) -> str:
+    if not file_path.exists() or file_path.stat().st_size == 0:
+        return ""
     suf = file_path.suffix.lower()
     if suf == ".pdf":
         text = ""

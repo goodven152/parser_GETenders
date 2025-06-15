@@ -78,6 +78,8 @@ def find_keyword_hits(
     *,
     threshold: int,
 ) -> Dict[str, int]:
+    if not text.strip():  # Проверка на пустой текст
+        return {}
     """Вернуть dict {keyword: score} — на строгом алгоритме (без partial_ratio)."""
     norm = _norm(text)
     hits = _hits(keywords, norm, threshold)

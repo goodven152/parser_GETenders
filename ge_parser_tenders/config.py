@@ -18,8 +18,12 @@ class ParserSettings(BaseSettings):
     log: str = "INFO"
     started_at: datetime | None = None
     model_config = {"extra": "ignore"}
+    download_timeout: int = 30
+    max_retries: int = 3
+    min_file_size: int = 100  # минимальный размер файла в байтах для обработки
 
     @classmethod
     def load(cls, path: str | Path = "config.json") -> "ParserSettings":
         from pathlib import Path
         return cls.model_validate_json(Path(path).read_bytes())
+

@@ -10,20 +10,32 @@ from selenium.common.exceptions import TimeoutException, WebDriverException
 
 def make_driver(headless: bool = True, download_dir: Path | None = None) -> webdriver.Chrome:
     opts = webdriver.ChromeOptions()
-    if headless:
-        opts.add_argument("--no-sandbox")
-        opts.add_argument("--disable-dev-shm-usage")
-        opts.add_argument("--headless=new")
-        opts.add_argument("--disable-gpu")
-    opts.add_argument("--window-size=1920,1080")
-    opts.add_argument("--lang=ka,en-US")
-
     prefs = {
         "download.default_directory": str(download_dir or Path.cwd()),
         "download.prompt_for_download": False,
         "download.directory_upgrade": True,
         "safebrowsing.enabled": True,
     }
+
+    if headless:
+        opts.add_argument("--no-sandbox")
+        opts.add_argument("--disable-dev-shm-usage")
+        opts.add_argument("--headless=new")
+        opts.add_argument("--disable-gpu")
+    opts.add_argument("--disable-blink-features=AutomationControlled")
+    opts.add_argument("--disable-infobars")
+    opts.add_argument("--window-size=1920,1080")
+    opts.add_argument("--lang=ka,en-US")
+    opts.add_experimental_option("excludeSwitches", ["enable-automation"])
+    # try:
+    #     driver = webdriver.Chrome(options=opts, service=Service("/usr/bin/chromedriver"))
+    #     driver.set_page_load_timeout(60)
+    #     return driver
+    # except Exception as e:
+    #     logging.critical(f"Failed to start Chrome: {e}")
+    #     raise
+    
+
     opts.add_experimental_option("prefs", prefs)
 
     # driver_path = ChromeDriverManager().install()
