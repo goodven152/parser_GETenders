@@ -46,7 +46,7 @@ from tqdm import tqdm
 
 
 from .config import ParserSettings
-
+from .memory_manager import MemoryManager
 from .driver_utils import make_driver, wait_click
 from .extractor import file_contains_keywords
 
@@ -197,7 +197,12 @@ def safe_click(driver, element, retries: int = 3):
 
 def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, settings: ParserSettings,) -> List[str]:
     """Возвращает список ID тендеров, в чьих документах найдены ключевые слова."""
-
+    memory_manager = MemoryManager(
+        warning_threshold_mb=settings.memory_warning_threshold_mb,
+        critical_threshold_mb=settings.memory_critical_threshold_mb,
+        gc_interval=settings.gc_interval_seconds
+    )
+    hits: List[str] = []
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     DOWNLOADS_DIR = Path("downloads")
@@ -207,7 +212,6 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
 
     cache_path = Path("visited_ids.txt")
     visited: Set[str] = set(cache_path.read_text().split()) if cache_path.exists() else set()
-    hits: List[str] = []
 
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
@@ -223,9 +227,10 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
 
             # фильтр «გამარჯვებული გამოვლენილია» (победитель определён)
             wait_click(driver, (By.ID, "app_donor_id"))
-            time.sleep(2)
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, "//option[contains(., 'გამარჯვებული გამოვლენილია')]"))
+            )
             wait_click(driver, (By.XPATH, "//option[contains(., 'გამარჯვებული გამოვლენილია')]"))
-            time.sleep(1)
             wait_click(driver, (By.ID, "search_btn"))
             WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, "#list_apps_by_subject tbody tr"))
@@ -237,7 +242,7 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                 rows = driver.find_elements(By.CSS_SELECTOR, "#list_apps_by_subject tbody tr")
 
                 for idx in tqdm(range(len(rows)), desc=f"Page {page}", unit="tender"):
-                    rows = driver.find_elements(By.CSS_SELECTOR, "#list_apps_by_subject tbody tr")
+                    # rows = driver.find_elements(By.CSS_SELECTOR, "#list_apps_by_subject tbody tr")
                     if idx >= len(rows):
                         break
 
@@ -261,7 +266,7 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                             "#app_bids table.ktable tbody tr td:nth-child(1)",
                         )
                         candidates: list[str] = [c.text.strip() for c in cand_cells if c.text.strip()]
-                        firm_found = any(settings.excluded_firm in c for c in candidates)
+                        firm_found = any(settings.excluded_firm.lower() in c.lower() for c in candidates)
                         logging.info(
                             "   Найденные кандидаты: %s. Кандидата შპს ,,ინგი-77 %s",
                             ", ".join(candidates) or "—",
@@ -292,15 +297,21 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                     logging.info("  Найдено %d вложений", len(links))
 
 
-
+                    if not memory_manager.check_memory():
+                        logging.warning("Memory usage critical, skipping file.")
+                        break
                     for link in links:
+                        if not memory_manager.check_memory():
+                            logging.warning("Memory usage critical, skipping file.")
+                            break
+
                         href = link.get_attribute("href")
                         url = href if href.startswith("http") else f"{root}/{href.lstrip('/')}"
 
                         display_name = (link.text.strip() or href.split("file=")[-1] or Path(url).name)
                         logging.info("  Скачиваем %s …", display_name)
 
-                        for attempt in range(3):  # 3 попытки скачивания
+                        for attempt in range(3):
                             try:
                                 resp = session.get(url, stream=True, timeout=30)
                                 resp.raise_for_status()
@@ -310,12 +321,6 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                                     logging.warning(f"Не скачан {url} после 3 попыток: {exc}")
                                     continue
                                 time.sleep(5 * (attempt + 1))
-                    # try:
-                    #     resp = session.get(url, stream=True, timeout=60)
-                    #     resp.raise_for_status()
-                    # except Exception as exc:
-                    #     logging.warning("   Не скачан %s (%s)", url, exc)
-                    #     continue
 
                         cd_name = _filename_from_cd(resp.headers.get("Content-Disposition"))
                         name = cd_name or link.text.strip() or href.split("file=")[-1]
@@ -328,14 +333,14 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                             for chunk in resp.iter_content(8192):
                                 f.write(chunk)
 
-                        if file_contains_keywords(out_path, settings=settings):
+                        if file_contains_keywords(out_path, settings=settings, memory_manager=memory_manager):
                             hits.append(tender_id)
-                            # если нашли хотя бы 1 файл — остальные можно не смотреть
                             break
 
                     # очистка временных файлов перед следующим тендером
                     shutil.rmtree(DOWNLOADS_DIR)
                     DOWNLOADS_DIR.mkdir(exist_ok=True)
+                    memory_manager.force_cleanup()
 
                     # назад к списку
                     wait_click(driver, (By.ID, "back_button_2"))

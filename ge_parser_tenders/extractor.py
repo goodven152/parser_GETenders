@@ -6,12 +6,16 @@
 * fuzzy-поиск (RapidFuzz) + при наличии Stanza — лемматизация
 """
 from __future__ import annotations
-from pathlib import Path
+
+import gc
+import time
 import logging
 import shlex
-from subprocess import run, PIPE
 import re
 import pandas as pd
+
+from pathlib import Path
+from subprocess import run, PIPE
 from pypdf import PdfReader
 
 from .config import ParserSettings       # regex + список
@@ -19,7 +23,40 @@ from .text_matcher import find_keyword_hits            # ← из вашего t
 from .ocr_image import extract_pdf_ocr
 
 
+class PDFTextExtractor:
+    def __init__(self, file_path: Path):
+        self.file_path = file_path
+        self.reader = None
+        self._text = None
 
+    def __enter__(self):
+        self.reader = PdfReader(self.file_path)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.reader:
+            # Пытаемся закрыть поток, если он существует
+            try:
+                self.reader.stream.close()
+            except AttributeError:
+                pass
+        self.reader = None
+        self._text = None
+        gc.collect()  # Принудительная очистка памяти
+
+    def extract_text(self) -> str:
+        if self._text is None:
+            try:
+                text_parts = []
+                for i, page in enumerate(self.reader.pages):
+                    text_parts.append(page.extract_text() or "")
+                    if (i + 1) % 10 == 0:
+                        gc.collect()
+                self._text = "\n".join(text_parts)
+            except Exception as e:
+                logging.error(f"Error extracting text: {e}")
+                self._text = ""
+        return self._text
 # --------------------------------------------------------------------------- #
 #                       helpers: pdf / excel  →  text                         #
 # --------------------------------------------------------------------------- #
@@ -40,32 +77,43 @@ def extract_text(file_path: Path) -> str:
         return ""
     suf = file_path.suffix.lower()
     if suf == ".pdf":
-        text = ""
-        try:                                         # 1) pypdf
-            text = "\n".join((p.extract_text() or "") for p in PdfReader(file_path).pages)
-            if len(text.strip()) >= 50:
-                return text
-            logging.debug("    pypdf дал мало текста (%d симв.) – пробуем дальше", len(text))
+        # text = ""
+        # 1) pypdf
+        try:    
+            with PDFTextExtractor(file_path) as extractor:                                     
+                text = "\n".join((p.extract_text() or "") for p in PdfReader(file_path).pages)
+                if len(text.strip()) >= 50:
+                    return text
+                logging.debug("    pypdf дал мало текста (%d симв.) – пробуем дальше", len(text))
         except Exception as exc:
             logging.debug("    pypdf failed (%s) – пробуем дальше", exc)
-        try:                                         # 2)  poppler           
+        finally:
+            gc.collect()
+        # 2)  poppler
+        try:                                                    
             text = _pdf_to_text_poppler(file_path)
             if len(text.strip()) >= 50:
                 return text
             logging.debug("    poppler дал мало текста (%d симв.) – идём в OCR", len(text))
         except Exception as exc:
             logging.debug("    poppler failed (%s) – идём в OCR", exc)
-        try:                                         # 3)  tesseract-ocr
+        finally:
+            gc.collect()
+        # 3)  tesseract-ocr
+        try:                                         
             return extract_pdf_ocr(file_path)
         except Exception as exc:
             logging.warning("%s: OCR failed (%s)", file_path.name, exc)
-
-    if suf in {".xls", ".xlsx"}:                     # Excel
+        finally:
+            gc.collect()
+    # Excel
+    if suf in {".xls", ".xlsx"}:                     
         try:
             return _xlsx_to_text(file_path)
         except Exception as exc:
             logging.warning("%s: excel-extract failed (%s)", file_path.name, exc)
-
+        finally:
+            gc.collect()
     return ""
 
 
