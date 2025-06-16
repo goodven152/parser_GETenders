@@ -294,7 +294,7 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                         EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.answ-file a"))
                     )
                     links = driver.find_elements(By.CSS_SELECTOR, "div.answ-file a")
-                    logging.info("  Найдено %d вложений", len(links))
+                    logging.info("  Найдено %d вложений test", len(links))
 
 
                     if not memory_manager.check_memory():
