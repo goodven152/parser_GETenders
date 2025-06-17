@@ -335,7 +335,9 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                     # очистка временных файлов перед следующим тендером
                     shutil.rmtree(DOWNLOADS_DIR)
                     DOWNLOADS_DIR.mkdir(exist_ok=True)
-                    memory_manager.force_cleanup()
+                    if memory_manager:
+                        logging.debug("📦 Проверка использования памяти перед извлечением текста")
+                        memory_manager.force_cleanup()
 
                     # назад к списку
                     wait_click(driver, (By.ID, "back_button_2"))
