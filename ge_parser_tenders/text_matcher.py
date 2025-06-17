@@ -31,8 +31,12 @@ except Exception as exc:
 def _lemma(text: str) -> str:
     if _NLP is None:
         return ""
-    doc = _NLP(text)
-    return " ".join(w.lemma or w.text for s in doc.sentences for w in s.words)
+    try:
+        doc = _NLP(text)
+        return " ".join(w.lemma or w.text for s in doc.sentences for w in s.words)
+    except Exception as e:
+        logging.error("Ошибка внутри лемматизации Stanza: %s", e)
+        return ""
 
 
 def _norm(text: str) -> str:

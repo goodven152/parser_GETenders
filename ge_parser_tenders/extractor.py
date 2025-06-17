@@ -83,7 +83,8 @@ def extract_text(file_path: Path) -> str:
         # 1) pypdf
         try:    
             with PDFTextExtractor(file_path) as extractor:                                     
-                text = "\n".join((p.extract_text() or "") for p in PdfReader(file_path).pages)
+                # text = "\n".join((p.extract_text() or "") for p in PdfReader(file_path).pages)
+                text = extractor.extract_text()
                 if len(text.strip()) >= 50:
                     return text
                 logging.debug("    pypdf дал мало текста (%d симв.) – пробуем дальше", len(text))
