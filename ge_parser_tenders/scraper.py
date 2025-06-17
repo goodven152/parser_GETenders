@@ -327,12 +327,15 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                         with out_path.open("wb") as f:
                             for chunk in resp.iter_content(8192):
                                 f.write(chunk)
-
-                        if file_contains_keywords(out_path, settings=settings, memory_manager=None):
-                            hits.append(tender_id)
-                            break
-
+                        try:
+                            if file_contains_keywords(out_path, settings=settings, memory_manager=None):
+                                hits.append(tender_id)
+                                break
+                        except Exception as e:
+                            logging.error(f"Ошибка при проверке файла {out_path.name}: {e}")
+                            continue
                         
+
                     # очистка временных файлов перед следующим тендером
                     shutil.rmtree(DOWNLOADS_DIR)
                     DOWNLOADS_DIR.mkdir(exist_ok=True)

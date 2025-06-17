@@ -157,7 +157,11 @@ def file_contains_keywords(
 
     # ── fuzzy-поиск ключевых слов
     thresh = threshold or settings.fuzzy_threshold
-    hits = find_keyword_hits(text, settings.keywords_geo, threshold=thresh)
+    try:
+        hits = find_keyword_hits(text, settings.keywords_geo, threshold=thresh)
+    except Exception as exc:
+        logging.error("  Ошибка при поиске ключевых слов: %s", exc)
+        return False
     logging.info(" Найдено %d ключевых слов (≥%d)\n", len(hits), thresh)
 
     # детальный список (DEBUG-уровень)
