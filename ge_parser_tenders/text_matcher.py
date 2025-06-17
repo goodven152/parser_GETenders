@@ -1,4 +1,3 @@
-# ge_parser_tenders/text_matcher.py  (целиком)
 from __future__ import annotations
 
 import logging
@@ -26,22 +25,26 @@ except Exception as exc:
     logging.warning("Stanza disabled: %s", exc)
     _NLP = None
 
+# ────────────────── Config ──────────────────
+MAX_TEXT_LENGTH = 30000
+MAX_LEMMA_LENGTH = 20000
 
 # ────────────────── helpers ──────────────────
 def _lemma(text: str) -> str:
     if _NLP is None:
         return ""
     try:
+        if len(text) > MAX_LEMMA_LENGTH:
+            logging.debug("_lemma: текст > %d, обрезаем", MAX_LEMMA_LENGTH)
+            text = text[:MAX_LEMMA_LENGTH]
         doc = _NLP(text)
         return " ".join(w.lemma or w.text for s in doc.sentences for w in s.words)
     except Exception as e:
-        logging.error("Ошибка внутри лемматизации Stanza: %s", e)
+        logging.error("Ошибка в лемматизации (Stanza): %s", e)
         return ""
-
 
 def _norm(text: str) -> str:
     return " ".join(text.split())
-
 
 def _regex_word(word: str) -> re.Pattern:
     """Точное однословное совпадение с учётом грузинского диапазона."""
@@ -50,31 +53,35 @@ def _regex_word(word: str) -> re.Pattern:
         re.I,
     )
 
-
 def _score(kw: str, haystack: str) -> int:
-    """Строгий scorer: для фраз – fuzz.ratio, для одного слова – regex-совпадение."""
-    if " " in kw:                      # фраза ≥ 2 слов
+    """Для фраз – fuzz.ratio, для одного слова – regex-совпадение."""
+    if " " in kw:
         return fuzz.ratio(kw, haystack)
     return 100 if _regex_word(kw).search(haystack) else 0
 
-
 def _hits(keywords: List[str], haystack: str, threshold: int) -> Dict[str, int]:
-    return {
-        kw: _score(kw, haystack)
-        for kw in keywords
-        if _score(kw, haystack) >= threshold
-    }
-
+    results = {}
+    for kw in keywords:
+        score = _score(kw, haystack)
+        if score >= threshold:
+            results[kw] = score
+    return results
 
 # ────────────────── public API ──────────────────
 def contains_keywords(text: str, keywords: List[str], *, threshold: int) -> bool:
-    """True, если найдено ≥ 1 ключа (строгий алгоритм + леммы)."""
+    if not text.strip():
+        return False
+
+    if len(text) > MAX_TEXT_LENGTH:
+        logging.debug("contains_keywords: текст > %d, обрезаем", MAX_TEXT_LENGTH)
+        text = text[:MAX_TEXT_LENGTH]
+
     norm = _norm(text)
     if _hits(keywords, norm, threshold):
         return True
+
     lemma = _lemma(norm)
     return bool(lemma) and _hits(keywords, lemma, threshold)
-
 
 def find_keyword_hits(
     text: str,
@@ -82,9 +89,13 @@ def find_keyword_hits(
     *,
     threshold: int,
 ) -> Dict[str, int]:
-    if not text.strip():  # Проверка на пустой текст
+    if not text.strip():
         return {}
-    """Вернуть dict {keyword: score} — на строгом алгоритме (без partial_ratio)."""
+
+    if len(text) > MAX_TEXT_LENGTH:
+        logging.debug("find_keyword_hits: текст > %d, обрезаем", MAX_TEXT_LENGTH)
+        text = text[:MAX_TEXT_LENGTH]
+
     norm = _norm(text)
     hits = _hits(keywords, norm, threshold)
 
@@ -93,4 +104,5 @@ def find_keyword_hits(
         hits_lemma = _hits(keywords, lemma, threshold)
         for kw, sc in hits_lemma.items():
             hits[kw] = max(sc, hits.get(kw, 0))
+
     return hits
