@@ -32,7 +32,7 @@ class MemoryManager:
         return True
 
     def force_cleanup(self):
-        logging.debug("🧹 Запуск garbage collection (GC)...")
+        logging.info("🧹 Запуск garbage collection (GC)...")
         gc.collect()
         self.last_gc_time = time.time()
-        logging.debug("✅ Очистка памяти завершена.")
+        logging.info("✅ Очистка памяти завершена.")
