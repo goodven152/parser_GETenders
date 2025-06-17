@@ -151,10 +151,14 @@ def file_contains_keywords(
     logging.info("  Начинаем поиск ключевых слов…")
 
     # ── быстрый префильтр regex ― резко сокращает количество fuzzy-сравнений
-    if not re.compile("|".join(map(re.escape, settings.keywords_geo)), flags=re.I).search(text):
-        logging.debug("  regex промахнулся — переходим к fuzzy + леммам")
-    else:
-        logging.debug(" regex совпал — уточняем fuzzy-скор")
+    try:
+        if not re.compile("|".join(map(re.escape, settings.keywords_geo)), flags=re.I).search(text):
+            logging.debug("  regex промахнулся — переходим к fuzzy + леммам")
+        else:
+            logging.debug(" regex совпал — уточняем fuzzy-скор")
+    except re.error as exc:
+        logging.error("  Ошибка в regex: %s", exc)
+        return False
 
     # ── fuzzy-поиск ключевых слов
     thresh = threshold or settings.fuzzy_threshold
