@@ -18,6 +18,8 @@ from pathlib import Path
 from subprocess import run, PIPE
 from pypdf import PdfReader
 
+from ge_parser_tenders.memory_manager import MemoryManager
+
 from .config import ParserSettings       # regex + список
 from .text_matcher import find_keyword_hits            # ← из вашего text_matcher.py
 from .ocr_image import extract_pdf_ocr
