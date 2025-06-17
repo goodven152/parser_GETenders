@@ -50,11 +50,6 @@ from .memory_manager import MemoryManager
 from .driver_utils import make_driver, wait_click
 from .extractor import file_contains_keywords
 
-# ---------------------------------------------------------------------------
-#   Фильтр компаний, которых следует исключать
-# ---------------------------------------------------------------------------
-
-
 
 # ---------------------------------------------------------------------------
 #                               helpers
@@ -309,7 +304,7 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                         url = href if href.startswith("http") else f"{root}/{href.lstrip('/')}"
 
                         display_name = (link.text.strip() or href.split("file=")[-1] or Path(url).name)
-                        logging.info("  Скачиваем %s …", display_name)
+                        logging.info("  Скачиваем %s … test test", display_name)
 
                         for attempt in range(3):
                             try:
@@ -333,7 +328,7 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                             for chunk in resp.iter_content(8192):
                                 f.write(chunk)
 
-                        if file_contains_keywords(out_path, settings=settings, memory_manager=memory_manager):
+                        if file_contains_keywords(out_path, settings=settings, memory_manager=None):
                             hits.append(tender_id)
                             break
 

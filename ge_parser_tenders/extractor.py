@@ -125,7 +125,11 @@ def file_contains_keywords(
     settings: ParserSettings,
     *,
     threshold: int | None = None,
+    memory_manager: MemoryManager | None = None,
 ) -> bool:
+    if memory_manager and not memory_manager.check_memory():
+        logging.info("Memory too high, skipping file")
+        return False
     """
     Возвращает True, если в документе ≥ одно ключевое слово
     (fuzzy-score ≥ *threshold*).  Пишет подробный лог, повторяя
