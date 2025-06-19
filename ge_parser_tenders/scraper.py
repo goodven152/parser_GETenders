@@ -65,7 +65,7 @@ def _unique(path: Path) -> Path:
 
 # ──────────────────────────── main scraper ────────────────────────────
 
-def scrape_and_save_json(settings: ParserSettings, max_pages: int | None = None):
+def scrape_tenders(settings: ParserSettings, max_pages: int | None = None):
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     DOWNLOADS_DIR = Path("downloads")
     if DOWNLOADS_DIR.exists():
