@@ -162,4 +162,4 @@ def _next_page(driver):
 if __name__ == "__main__":
     from .config import ParserSettings
     settings = ParserSettings.load()
-    scrape_and_save_json(settings, max_pages=settings.max_pages)
+    scrape_tenders(settings, max_pages=settings.max_pages)
