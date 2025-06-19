@@ -55,6 +55,8 @@ class PDFTextExtractor:
                     if (i + 1) % 10 == 0:
                         gc.collect()
                 self._text = "\n".join(text_parts)
+                del text_parts
+                gc.collect()
             except Exception as e:
                 logging.error(f"Error extracting text: {e}")
                 self._text = ""
@@ -71,7 +73,11 @@ def _pdf_to_text_poppler(path: Path) -> str:
 def _xlsx_to_text(path: Path) -> str:
     engine = "openpyxl" if path.suffix == ".xlsx" else "xlrd"
     df = pd.read_excel(path, dtype=str, header=None, engine=engine)
-    return "\n".join(df.fillna("").astype(str).agg("\t".join, axis=1))
+    # return "\n".join(df.fillna("").astype(str).agg("\t".join, axis=1))
+    text = "\n".join(df.fillna("").astype(str).agg("\t".join, axis=1))
+    del df
+    gc.collect()
+    return text
 
 
 def extract_text(file_path: Path) -> str:
@@ -144,6 +150,8 @@ def file_contains_keywords(
     except Exception as exc:
         logging.error("  Ошибка при извлечении текста: %s", exc)
         return ""
+    
+
     if not text.strip():
         logging.info("  пустой/не распознан")
         return False
@@ -174,4 +182,6 @@ def file_contains_keywords(
         for kw, score in sorted(hits.items(), key=lambda t: -t[1]):
             logging.debug("        %-60s  score=%d", kw, score)
 
+    del text, hits  # освобождаем память
+    gc.collect()  # принудительная очистка памяти
     return bool(hits)
