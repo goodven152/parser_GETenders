@@ -1,13 +1,12 @@
 from __future__ import annotations
-import stanza
+
 import logging
 import re
-import gc
-
 from pathlib import Path
 from typing import Dict, List
+
 from rapidfuzz import fuzz
-from .memory_manager import MemoryManager
+import stanza
 
 GE_RANGE = "ა-ჰ"                        # груз. алфавит mkhedruli
 
@@ -69,7 +68,7 @@ def _hits(keywords: List[str], haystack: str, threshold: int) -> Dict[str, int]:
     return results
 
 # ────────────────── public API ──────────────────
-def contains_keywords(text: str, keywords: List[str], *, threshold: int, memory_manager: MemoryManager | None = None) -> bool:
+def contains_keywords(text: str, keywords: List[str], *, threshold: int) -> bool:
     if not text.strip():
         return False
 
@@ -77,19 +76,11 @@ def contains_keywords(text: str, keywords: List[str], *, threshold: int, memory_
         logging.debug("contains_keywords: текст > %d, обрезаем", MAX_TEXT_LENGTH)
         text = text[:MAX_TEXT_LENGTH]
 
-    if memory_manager and not memory_manager.check_memory():
-        logging.warning("MemoryManager: high memory before normalization")
-        gc.collect()
-
     norm = _norm(text)
     if _hits(keywords, norm, threshold):
-        gc.collect()
         return True
 
     lemma = _lemma(norm)
-    if memory_manager:
-        memory_manager.force_cleanup()
-    gc.collect()
     return bool(lemma) and _hits(keywords, lemma, threshold)
 
 def find_keyword_hits(
@@ -97,7 +88,6 @@ def find_keyword_hits(
     keywords: List[str],
     *,
     threshold: int,
-    memory_manager: MemoryManager | None = None
 ) -> Dict[str, int]:
     if not text.strip():
         return {}
@@ -110,10 +100,9 @@ def find_keyword_hits(
     hits = _hits(keywords, norm, threshold)
 
     lemma = _lemma(norm)
-    gc.collect()
     if lemma:
         hits_lemma = _hits(keywords, lemma, threshold)
         for kw, sc in hits_lemma.items():
             hits[kw] = max(sc, hits.get(kw, 0))
-    gc.collect()
+
     return hits

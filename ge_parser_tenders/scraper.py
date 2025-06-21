@@ -26,7 +26,6 @@ import shutil
 import tempfile
 import time
 import socket
-import gc
 from pathlib import Path
 from typing import List, Set
 from urllib.parse import unquote, urlparse
@@ -290,13 +289,12 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                         EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.answ-file a"))
                     )
                     links = driver.find_elements(By.CSS_SELECTOR, "div.answ-file a")
-                    logging.info("  Найдено %d вложений", len(links))
+                    logging.info("  Найдено %d вложений test", len(links))
 
 
                     if not memory_manager.check_memory():
                         logging.warning("Memory usage critical, skipping file.")
                         break
-
                     for link in links:
                         if not memory_manager.check_memory():
                             logging.warning("Memory usage critical, skipping file.")
@@ -306,9 +304,8 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                         url = href if href.startswith("http") else f"{root}/{href.lstrip('/')}"
 
                         display_name = (link.text.strip() or href.split("file=")[-1] or Path(url).name)
-                        logging.info("  Скачиваем %s", display_name)
-                        
-                        resp = None
+                        logging.info("  Скачиваем %s … test test", display_name)
+
                         for attempt in range(3):
                             try:
                                 resp = session.get(url, stream=True, timeout=30)
@@ -319,8 +316,6 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                                     logging.warning(f"Не скачан {url} после 3 попыток: {exc}")
                                     continue
                                 time.sleep(5 * (attempt + 1))
-                        if resp is None:
-                            continue
 
                         cd_name = _filename_from_cd(resp.headers.get("Content-Disposition"))
                         name = cd_name or link.text.strip() or href.split("file=")[-1]
@@ -339,21 +334,14 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                         except Exception as e:
                             logging.error(f"Ошибка при проверке файла {out_path.name}: {e}")
                             continue
-                        del resp, out_path
-                        gc.collect()
                         
 
                     # очистка временных файлов перед следующим тендером
                     shutil.rmtree(DOWNLOADS_DIR)
                     DOWNLOADS_DIR.mkdir(exist_ok=True)
-
                     if memory_manager:
                             logging.info("📦 Проверка использования памяти перед извлечением текста")
                             memory_manager.force_cleanup()
-                    # очистка памяти
-                    del links
-                    gc.collect()
-
 
                     # назад к списку
                     wait_click(driver, (By.ID, "back_button_2"))
