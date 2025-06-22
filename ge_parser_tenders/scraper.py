@@ -1,4 +1,6 @@
 from __future__ import annotations
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 
 """
 scraper.py ― грузинские тендеры
@@ -190,6 +192,48 @@ def safe_click(driver, element, retries: int = 3):
 #                               main scraper
 # ---------------------------------------------------------------------------
 
+# --- перед scrape_tenders() добавьте хелпер --------------------------
+def _download_and_check(url: str,
+                        display_name: str,
+                        session: requests.Session,
+                        downloads_dir: Path,
+                        settings: ParserSettings,
+                        memory_manager: MemoryManager | None) -> bool:
+    """
+    Скачивает файл, сохраняет во временную папку и проверяет ключевые слова.
+    Возвращает True, если сработал хотя бы один keyword.
+    """
+    # cкачиваем (3 ретрая как прежде)
+    for attempt in range(3):
+        try:
+            resp = session.get(url, stream=True, timeout=30)
+            resp.raise_for_status()
+            break
+        except Exception as exc:
+            if attempt == 2:
+                logging.warning("Не скачан %s (%s)", url, exc)
+                return False
+            time.sleep(5 * (attempt + 1))
+
+    cd_name = _filename_from_cd(resp.headers.get("Content-Disposition"))
+    name = cd_name or display_name or Path(url).name
+    if "." not in Path(name).name:
+        name += _ext_from_content_type(resp.headers.get("Content-Type"))
+
+    out_path = _unique(downloads_dir / _safe_filename(name))
+    with out_path.open("wb") as f:
+        for chunk in resp.iter_content(8192):
+            f.write(chunk)
+
+    # проверяем ключевые слова
+    try:
+        return file_contains_keywords(out_path, settings=settings, memory_manager=None)
+    finally:
+        # не держим место на диске – удаляем сразу
+        out_path.unlink(missing_ok=True)
+
+
+
 def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, settings: ParserSettings,) -> List[str]:
     """Возвращает список ID тендеров, в чьих документах найдены ключевые слова."""
     memory_manager = MemoryManager(
@@ -292,49 +336,43 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                     logging.info("  Найдено %d вложений test", len(links))
 
 
-                    if not memory_manager.check_memory():
-                        logging.warning("Memory usage critical, skipping file.")
-                        break
+                    # if not memory_manager.check_memory():
+                    #     logging.warning("Memory usage critical, skipping file.")
+                    #     break
+                    links_info: list[tuple[str, str]] = []
                     for link in links:
-                        if not memory_manager.check_memory():
-                            logging.warning("Memory usage critical, skipping file.")
-                            break
-
                         href = link.get_attribute("href")
                         url = href if href.startswith("http") else f"{root}/{href.lstrip('/')}"
-
-                        display_name = (link.text.strip() or href.split("file=")[-1] or Path(url).name)
-                        logging.info("  Скачиваем %s … test test", display_name)
-
-                        for attempt in range(3):
+                        links_info.append((url, link.text.strip()))
+                    # 2) параллельная обработка
+                    hits_found = False
+                    max_threads = max(1, getattr(settings, "max_download_threads", 4))
+                    with ThreadPoolExecutor(max_workers=max_threads) as executor:
+                        futures = {
+                            executor.submit(
+                                _download_and_check,
+                                url,
+                                display_name,
+                                session,
+                                DOWNLOADS_DIR,
+                                settings,
+                                memory_manager,
+                            ): url
+                            for url, display_name in links_info
+                            if memory_manager.check_memory()
+                        }
+                        for fut in as_completed(futures):
                             try:
-                                resp = session.get(url, stream=True, timeout=30)
-                                resp.raise_for_status()
-                                break
-                            except Exception as exc:
-                                if attempt == 2:
-                                    logging.warning(f"Не скачан {url} после 3 попыток: {exc}")
-                                    continue
-                                time.sleep(5 * (attempt + 1))
+                                if fut.result():          # ← хотя бы один файл «сработал»
+                                    hits.append(tender_id)
+                                    hits_found = True
+                                    break
+                            except Exception as e:
+                                logging.error("Ошибка при обработке %s: %s", futures[fut], e)
 
-                        cd_name = _filename_from_cd(resp.headers.get("Content-Disposition"))
-                        name = cd_name or link.text.strip() or href.split("file=")[-1]
-                        if "." not in Path(name).name:
-                            name += _ext_from_content_type(resp.headers.get("Content-Type"))
-
-                        out_path = _unique(DOWNLOADS_DIR / _safe_filename(name))
-
-                        with out_path.open("wb") as f:
-                            for chunk in resp.iter_content(8192):
-                                f.write(chunk)
-                        try:
-                            if file_contains_keywords(out_path, settings=settings, memory_manager=None):
-                                hits.append(tender_id)
-                                break
-                        except Exception as e:
-                            logging.error(f"Ошибка при проверке файла {out_path.name}: {e}")
-                            continue
-                        
+                        if hits_found:
+                            # отменяем оставшиеся задачи (Python 3.11+)
+                            executor.shutdown(cancel_futures=True)                        
 
                     # очистка временных файлов перед следующим тендером
                     shutil.rmtree(DOWNLOADS_DIR)

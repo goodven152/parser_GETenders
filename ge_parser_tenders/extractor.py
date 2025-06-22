@@ -138,7 +138,7 @@ def file_contains_keywords(
     (fuzzy-score ≥ *threshold*).  Пишет подробный лог, повторяя
     поведение `keyword_tester.py`.
     """
-    logging.info("  Сканируем % test", file_path.name)
+    logging.info("  Сканируем %s test", file_path.name)
     try:
         text = extract_text(file_path)
     except Exception as exc:

@@ -6,10 +6,11 @@
   "KEYWORDS_GEO": [
     "სოლისებრი",
     "ურდული",
-    "საფეხურიანი"
+    "საფეხურიანი",
+    "რომელიც"
   ],
   "output": "found_tenders.json",
-  "max_pages": 3,
+  "max_pages": 10,
   "headless": true,
   "reset_cache": true,
   "log": "INFO",
