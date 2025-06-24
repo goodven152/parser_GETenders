@@ -234,7 +234,7 @@ def _download_and_check(url: str,
 
     # проверяем ключевые слова
     try:
-        return file_contains_keywords(out_path, settings=settings, memory_manager=None)
+        return file_contains_keywords(out_path, settings=settings, memory_manager=memory_manager)
     finally:
         # не держим место на диске – удаляем сразу
         out_path.unlink(missing_ok=True)
