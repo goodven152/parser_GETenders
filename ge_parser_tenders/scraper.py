@@ -373,7 +373,7 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                     with ThreadPoolExecutor(max_workers=max_threads) as executor:
                         futures = {}
                         for url, display_name in links_info:
-                            if memory_manager.check_memory():
+                            if not memory_manager.check_memory():
                                 logging.warning("Memory usage critical, skipping file %s.", display_name)
                                 continue
                             time.sleep(random.uniform(0.2, 0.5))
