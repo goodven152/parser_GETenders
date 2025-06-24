@@ -21,6 +21,7 @@ scraper.py ― грузинские тендеры
   отключена.
 """
 
+import random
 import logging
 import mimetypes
 import re
@@ -209,11 +210,17 @@ def _download_and_check(url: str,
             resp = session.get(url, stream=True, timeout=30)
             resp.raise_for_status()
             break
-        except Exception as exc:
+        except (requests.exceptions.ConnectionError,
+                requests.exceptions.ChunkedEncodingError,
+                requests.exceptions.Timeout) as exc:
             if attempt == 2:
                 logging.warning("Не скачан %s (%s)", url, exc)
                 return False
-            time.sleep(5 * (attempt + 1))
+            sleep_time = 2 ** attempt + (0.1 * attempt) # экспоненциальная задержка
+            time.sleep(sleep_time)
+        except Exception as exc:
+            logging.error("Ошибка при скачивании %s: %s", url, exc)
+            return False
 
     cd_name = _filename_from_cd(resp.headers.get("Content-Disposition"))
     name = cd_name or display_name or Path(url).name
@@ -261,6 +268,11 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
 
             # скопируем cookie в requests.Session → экономим авторизацию
             session = requests.Session()
+            session.headers.update({
+                "User-Agent": "Mozilla/5.0 (compatible; scraper/1.0)",
+                "Connection": "keep-alive",
+                "Accept-Encoding": "gzip, deflate",
+            })
             for c in driver.get_cookies():
                 session.cookies.set(c["name"], c["value"])
 
@@ -357,10 +369,16 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                         links_info.append((url, link.text.strip()))
                     # 2) параллельная обработка
                     hits_found = False
-                    max_threads = max(1, getattr(settings, "max_download_threads", 4))
+                    max_threads = max(1, getattr(settings, "max_download_threads", 2))
                     with ThreadPoolExecutor(max_workers=max_threads) as executor:
-                        futures = {
-                            executor.submit(
+                        futures = {}
+                        for url, display_name in links_info:
+                            if memory_manager.check_memory():
+                                logging.warning("Memory usage critical, skipping file %s.", display_name)
+                                continue
+                            time.sleep(random.uniform(0.2, 0.5))
+                            
+                            fut = executor.submit(
                                 _download_and_check,
                                 url,
                                 display_name,
@@ -368,10 +386,8 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                                 DOWNLOADS_DIR,
                                 settings,
                                 memory_manager,
-                            ): url
-                            for url, display_name in links_info
-                            if memory_manager.check_memory()
-                        }
+                            )
+                            futures[fut] = url
                         for fut in as_completed(futures):
                             try:
                                 if fut.result():          # ← хотя бы один файл «сработал»
@@ -410,7 +426,9 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
             if 'driver' in locals():
                 driver.quit()
 
-    cache_path.write_text("\n".join(sorted(visited)))
+    with cache_path.open("w", encoding="utf-8") as f:
+        for tid in sorted(visited):
+            f.write(tid + "\n")
     return hits
 
 
