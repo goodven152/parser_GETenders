@@ -3,11 +3,11 @@ import logging
 import sys
 import json
 from pathlib import Path
-from collections.abc import Iterable
+from collections.abc import Sequence
 from .scraper import scrape_tenders
 from .config import ParserSettings
 
-def main(argv: Iterable[str] | None = None):
+def main(argv: Sequence[str] | None = None):
     # --- 0. Предварительный парсер, чтобы узнать путь к конфигу ---
     prelim_parser = argparse.ArgumentParser(add_help=False)
     prelim_parser.add_argument(

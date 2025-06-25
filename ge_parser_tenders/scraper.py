@@ -45,6 +45,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.remote.webelement import WebElement
 from slugify import slugify
 from tqdm import tqdm
+import threading
+import stanza
 
 
 from .config import ParserSettings
@@ -79,7 +81,7 @@ def _filename_from_cd(cd: str | None) -> str | None:
     if not cd:
         return None
 
-    # RFC 5987 — filename*=utf-8''%E1%83%93%E1%83%90…
+    # RFC 5987 — filename*=utf-8''%E1%83%93%E1%83%90…
     if "filename*" in cd:
         _, value = cd.split("filename*", 1)[1].split("=", 1)
         if "''" in value:
@@ -233,6 +235,19 @@ def _download_and_check(url: str,
         out_path.unlink(missing_ok=True)
 
 
+_thread_local = threading.local()
+
+def _get_nlp():
+    if getattr(_thread_local, "nlp", None) is None:
+        _thread_local.nlp = stanza.Pipeline(
+            "ka",
+            processors="tokenize,pos,lemma",
+            tokenize_no_ssplit=True,
+            use_gpu=False,
+            logging_level="WARN",
+        )
+    return _thread_local.nlp
+
 
 def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, settings: ParserSettings,) -> List[str]:
     """Возвращает список ID тендеров, в чьих документах найдены ключевые слова."""
@@ -351,12 +366,15 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                     #     break
                     links_info: list[tuple[str, str]] = []
                     for link in links:
-                        href = link.get_attribute("href")
+                        href = link.get_attribute("href") or ""
+                        if not href:
+                            # пропускаем элементы без ссылки
+                            continue
                         url = href if href.startswith("http") else f"{root}/{href.lstrip('/')}"
                         links_info.append((url, link.text.strip()))
                     # 2) параллельная обработка
                     hits_found = False
-                    max_threads = max(1, getattr(settings, "max_download_threads", 4))
+                    max_threads = 1 if settings.use_stanza_lemmas else 4
                     with ThreadPoolExecutor(max_workers=max_threads) as executor:
                         futures = {
                             executor.submit(
@@ -414,4 +432,4 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
 
 
 if __name__ == "__main__":
-    print(scrape_tenders(max_pages=1, headless=False))
+    print(scrape_tenders(max_pages=1, headless=False, settings=ParserSettings.load()))

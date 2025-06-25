@@ -37,8 +37,13 @@ def _lemma(text: str) -> str:
         if len(text) > MAX_LEMMA_LENGTH:
             logging.debug("_lemma: текст > %d, обрезаем", MAX_LEMMA_LENGTH)
             text = text[:MAX_LEMMA_LENGTH]
-        doc = _NLP(text)
-        return " ".join(w.lemma or w.text for s in doc.sentences for w in s.words)
+        doc = _NLP(text)  # type: ignore[operator]
+        # mypy/pylance: Stanza Document lacks stubs → suppress attr check
+        return " ".join(
+            w.lemma or w.text  # type: ignore[attr-defined]
+            for s in doc.sentences  # type: ignore[attr-defined]
+            for w in s.words  # type: ignore[attr-defined]
+        )
     except Exception as e:
         logging.error("Ошибка в лемматизации (Stanza): %s", e)
         return ""
@@ -56,7 +61,8 @@ def _regex_word(word: str) -> re.Pattern:
 def _score(kw: str, haystack: str) -> int:
     """Для фраз – fuzz.ratio, для одного слова – regex-совпадение."""
     if " " in kw:
-        return fuzz.ratio(kw, haystack)
+        # RapidFuzz возвращает float; приводим к int для однородности
+        return int(fuzz.ratio(kw, haystack))
     return 100 if _regex_word(kw).search(haystack) else 0
 
 def _hits(keywords: List[str], haystack: str, threshold: int) -> Dict[str, int]:
@@ -81,7 +87,9 @@ def contains_keywords(text: str, keywords: List[str], *, threshold: int) -> bool
         return True
 
     lemma = _lemma(norm)
-    return bool(lemma) and _hits(keywords, lemma, threshold)
+    if not lemma:
+        return False
+    return bool(_hits(keywords, lemma, threshold))
 
 def find_keyword_hits(
     text: str,

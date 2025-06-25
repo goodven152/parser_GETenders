@@ -49,6 +49,8 @@ class PDFTextExtractor:
     def extract_text(self) -> str:
         if self._text is None:
             try:
+                if self.reader is None:
+                    self.reader = PdfReader(self.file_path)
                 text_parts = []
                 for i, page in enumerate(self.reader.pages):
                     text_parts.append(page.extract_text() or "")
@@ -143,7 +145,7 @@ def file_contains_keywords(
         text = extract_text(file_path)
     except Exception as exc:
         logging.error("  Ошибка при извлечении текста: %s", exc)
-        return ""
+        return False
     if not text.strip():
         logging.info("  пустой/не распознан")
         return False
