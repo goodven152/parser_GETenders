@@ -2,6 +2,7 @@ import argparse
 import logging
 import sys
 import json
+import time
 from pathlib import Path
 from collections.abc import Sequence
 from .scraper import scrape_tenders
@@ -71,11 +72,19 @@ def main(argv: Sequence[str] | None = None):
         format="%(levelname)s: %(message)s",
     )
 
-    logging.info("Starting scraperrrrrrrrrrrrrrrr…")
-    try:
-        ids = scrape_tenders(max_pages=max_pages, headless=headless, settings=settings)
-    except KeyboardInterrupt:
-        sys.exit("Interrupted by user")
+    logging.info("Starting scraper…")
+
+    attempt = 1
+    while True:
+        try:
+            ids = scrape_tenders(max_pages=max_pages, headless=headless, settings=settings)
+            break  # completed without unhandled exceptions
+        except KeyboardInterrupt:
+            sys.exit("Interrupted by user")
+        except Exception as exc:
+            logging.exception("Scraper crashed on attempt %d: %s", attempt, exc)
+            attempt += 1
+            time.sleep(30)  # небольшая пауза перед перезапуском
 
     Path(output_path).write_text(json.dumps(ids, indent=2, ensure_ascii=False))
     print(f"Saved {len(ids)} tender IDs → {output_path}")

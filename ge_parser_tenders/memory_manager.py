@@ -15,19 +15,23 @@ class MemoryManager:
         current_memory = psutil.Process().memory_info().rss
 
         if current_memory > self.critical_threshold:
-            logging.debug(f"🔍 Текущая память: {current_memory / (1024 * 1024):.2f} MB")
+            logging.warning(
+                "🚨 Memory usage %.1f MB > critical threshold %.1f MB — forced GC",
+                current_memory / (1024 * 1024),
+                self.critical_threshold / (1024 * 1024),
+            )
             self.force_cleanup()
             return False
 
-        if current_memory > self.warning_threshold:
-            if time.time() - self.last_gc_time > self.gc_interval:
-                logging.warning("🚨 Достигнут критический порог памяти! Принудительная очистка...")
-                self.force_cleanup()
-
-        if current_memory > self.warning_threshold:
-            if time.time() - self.last_gc_time > self.gc_interval:
-                logging.info("⚠️ Высокое потребление памяти. Запуск очистки...")
-                self.force_cleanup()
+        if current_memory > self.warning_threshold and (
+            time.time() - self.last_gc_time > self.gc_interval
+        ):
+            logging.info(
+                "⚠️ Memory usage %.1f MB > warning threshold %.1f MB — GC",
+                current_memory / (1024 * 1024),
+                self.warning_threshold / (1024 * 1024),
+            )
+            self.force_cleanup()
         
         return True
 

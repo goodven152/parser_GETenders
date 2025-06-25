@@ -10,12 +10,11 @@ from __future__ import annotations
 import gc
 import time
 import logging
-import shlex
 import re
 import pandas as pd
 
 from pathlib import Path
-from subprocess import run, PIPE
+from subprocess import run, PIPE, CalledProcessError, TimeoutExpired
 from pypdf import PdfReader
 
 from ge_parser_tenders.memory_manager import MemoryManager
@@ -65,9 +64,26 @@ class PDFTextExtractor:
 #                       helpers: pdf / excel  →  text                         #
 # --------------------------------------------------------------------------- #
 def _pdf_to_text_poppler(path: Path) -> str:
-    cmd = f"pdftotext -layout -enc UTF-8 {shlex.quote(str(path))} -"
-    proc = run(cmd, shell=True, stdout=PIPE, stderr=PIPE, timeout=60)
-    return proc.stdout.decode("utf-8", "ignore")
+    """Extract text using poppler's pdftotext. Returns empty string on error."""
+    try:
+        proc = run(
+            [
+                "pdftotext",
+                "-layout",
+                "-enc",
+                "UTF-8",
+                str(path),
+                "-",
+            ],
+            stdout=PIPE,
+            stderr=PIPE,
+            check=True,
+            timeout=60,
+        )
+        return proc.stdout.decode("utf-8", "ignore")
+    except (CalledProcessError, FileNotFoundError, TimeoutExpired) as exc:
+        logging.debug("pdftotext failed: %s", exc)
+        return ""
 
 
 def _xlsx_to_text(path: Path) -> str:

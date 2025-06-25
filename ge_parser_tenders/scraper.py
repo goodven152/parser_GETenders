@@ -45,8 +45,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.remote.webelement import WebElement
 from slugify import slugify
 from tqdm import tqdm
-import threading
-import stanza
 
 
 from .config import ParserSettings
@@ -229,24 +227,10 @@ def _download_and_check(url: str,
 
     # проверяем ключевые слова
     try:
-        return file_contains_keywords(out_path, settings=settings, memory_manager=None)
+        return file_contains_keywords(out_path, settings=settings, memory_manager=memory_manager)
     finally:
         # не держим место на диске – удаляем сразу
         out_path.unlink(missing_ok=True)
-
-
-_thread_local = threading.local()
-
-def _get_nlp():
-    if getattr(_thread_local, "nlp", None) is None:
-        _thread_local.nlp = stanza.Pipeline(
-            "ka",
-            processors="tokenize,pos,lemma",
-            tokenize_no_ssplit=True,
-            use_gpu=False,
-            logging_level="WARN",
-        )
-    return _thread_local.nlp
 
 
 def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, settings: ParserSettings,) -> List[str]:
@@ -257,7 +241,9 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
         gc_interval=settings.gc_interval_seconds
     )
     hits: List[str] = []
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    # Настраиваем логирование только если его ещё не настроили (например, CLI)
+    if not logging.getLogger().handlers:
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     DOWNLOADS_DIR = Path("downloads")
     if DOWNLOADS_DIR.exists():
@@ -266,6 +252,8 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
 
     cache_path = Path("visited_ids.txt")
     visited: Set[str] = set(cache_path.read_text().split()) if cache_path.exists() else set()
+    # откроем файл на дозапись, чтобы фиксировать прогресс после каждого тендера
+    cache_fh = cache_path.open("a", encoding="utf-8")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
@@ -304,9 +292,20 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                     tender_id = tender_row.find_element(By.CSS_SELECTOR, "p strong").text.strip()
                     if tender_id in visited:
                         continue
-                    visited.add(tender_id)
 
-                    safe_click(driver, tender_row)
+                    # помечаем тендер как обработанный сразу,
+                    # чтобы при рестарте не вернуться к нему повторно
+                    visited.add(tender_id)
+                    cache_fh.write(f"{tender_id}\n")
+                    cache_fh.flush()
+
+                    # оборачиваем начало обработки, чтобы при ошибке перейти к следующему
+                    try:
+                        safe_click(driver, tender_row)
+                    except Exception as exc:
+                        logging.warning("Не удалось открыть тендер %s (%s) – пропускаем", tender_id, exc)
+                        continue
+
                     # ―――――― Проверка кандидатов на вкладке «შეთავაზებები» ―――――――
                     try:
                         wait_click(driver, (By.XPATH, "//a[contains(., 'შეთავაზებები')]"))
@@ -427,7 +426,7 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
             if 'driver' in locals():
                 driver.quit()
 
-    cache_path.write_text("\n".join(sorted(visited)))
+    cache_fh.close()
     return hits
 
 

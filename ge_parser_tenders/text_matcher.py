@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 from typing import Dict, List
 
+import threading
 from rapidfuzz import fuzz
 import stanza
 
@@ -12,18 +13,31 @@ GE_RANGE = "ა-ჰ"                        # груз. алфавит mkhedruli
 
 __all__ = ["contains_keywords", "find_keyword_hits"]
 
-# ────────────────── Stanza init ──────────────────
-try:
-    _NLP = stanza.Pipeline(
-        "ka",
-        processors="tokenize,pos,lemma",
-        tokenize_no_ssplit=True,
-        use_gpu=False,
-        logging_level="WARN",
-    )
-except Exception as exc:
-    logging.warning("Stanza disabled: %s", exc)
-    _NLP = None
+# ────────────────── Stanza (thread-local) ──────────────────
+
+_thread_local = threading.local()
+
+
+def _get_nlp():
+    """Return (and cache) a Stanza Pipeline unique for the current thread."""
+    nlp = getattr(_thread_local, "nlp", None)
+    if nlp is not None:
+        return nlp
+
+    try:
+        nlp = stanza.Pipeline(
+            "ka",
+            processors="tokenize,pos,lemma",
+            tokenize_no_ssplit=True,
+            use_gpu=False,
+            logging_level="WARN",
+        )
+    except Exception as exc:
+        logging.warning("Stanza disabled in this thread: %s", exc)
+        nlp = None
+
+    _thread_local.nlp = nlp  # cache even if None, to skip retry
+    return nlp
 
 # ────────────────── Config ──────────────────
 MAX_TEXT_LENGTH = 30000
@@ -31,13 +45,14 @@ MAX_LEMMA_LENGTH = 20000
 
 # ────────────────── helpers ──────────────────
 def _lemma(text: str) -> str:
-    if _NLP is None:
+    nlp = _get_nlp()
+    if nlp is None:
         return ""
     try:
         if len(text) > MAX_LEMMA_LENGTH:
             logging.debug("_lemma: текст > %d, обрезаем", MAX_LEMMA_LENGTH)
             text = text[:MAX_LEMMA_LENGTH]
-        doc = _NLP(text)  # type: ignore[operator]
+        doc = nlp(text)  # type: ignore[operator]
         # mypy/pylance: Stanza Document lacks stubs → suppress attr check
         return " ".join(
             w.lemma or w.text  # type: ignore[attr-defined]
