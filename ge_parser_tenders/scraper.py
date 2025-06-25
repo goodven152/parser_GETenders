@@ -328,13 +328,23 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                         EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'დოკუმენტაცია')]"))
                     )
                     wait_click(driver, (By.XPATH, "//a[contains(., 'დოკუმენტაცია')]"))
-
-                    WebDriverWait(driver, 10).until(
-                        EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.answ-file a"))
-                    )
-                    links = driver.find_elements(By.CSS_SELECTOR, "div.answ-file a")
-                    logging.info("  Найдено %d вложений test", len(links))
-
+                    try:
+                        WebDriverWait(driver, 10).until(
+                            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.answ-file a"))
+                        )
+                        links = driver.find_elements(By.CSS_SELECTOR, "div.answ-file a")
+                        logging.info("  Найдено %d вложений test", len(links))
+                    except TimeoutException:
+                        try:
+                            WebDriverWait(driver, 10).until(
+                                EC.presence_of_all_elements_located((By.CSS_SELECTOR, "#tender_docs td.obsolete0 a"))
+                            )
+                            links = driver.find_elements(By.CSS_SELECTOR, "#tender_docs td.obsolete0 a")
+                            logging.info("  Найдено %d вложений ", len((links)))
+                        except TimeoutException:
+                            links = []
+                            logging.warning("  Вложения не найдены ни по answ-file, ни по tender_docs")
+                    
 
                     # if not memory_manager.check_memory():
                     #     logging.warning("Memory usage critical, skipping file.")
