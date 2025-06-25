@@ -21,6 +21,7 @@ class ParserSettings(BaseSettings):
     download_timeout: int = 30
     max_retries: int = 3
     min_file_size: int = 100  # минимальный размер файла в байтах для обработки
+    max_download_threads: int = Field(1, alias="MAX_DOWNLOAD_THREADS")
     memory_warning_threshold_mb: int = Field(1000, alias="MEMORY_WARNING_THRESHOLD_MB")
     memory_critical_threshold_mb: int = Field(1500, alias="MEMORY_CRITICAL_THRESHOLD_MB")
     gc_interval_seconds: int = Field(60, alias="GC_INTERVAL_SECONDS")

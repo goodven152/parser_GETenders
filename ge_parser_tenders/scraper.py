@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 scraper.py ― грузинские тендеры
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* проходит по страницам сайта, кликает «დოკუმენტაცია»
+* проходит по страницам сайта, кликает «დოკუმЕნტაცია»
 * скачивает все прикреплённые файлы
 * даёт им читаемые ASCII‑имена (slug‑ified), чтобы внешние CLI‑утилиты
   вроде *pdftotext* не спотыкались о юникод‑пути
@@ -373,7 +373,7 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                         links_info.append((url, link.text.strip()))
                     # 2) параллельная обработка
                     hits_found = False
-                    max_threads = 1 if settings.use_stanza_lemmas else 4
+                    max_threads = settings.max_download_threads or 1
                     with ThreadPoolExecutor(max_workers=max_threads) as executor:
                         futures = {
                             executor.submit(
