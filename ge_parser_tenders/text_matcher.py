@@ -27,7 +27,7 @@ def _get_nlp():
     try:
         nlp = stanza.Pipeline(
             "ka",
-            processors="tokenize,pos,lemma",
+            processors="tokenize,mwt,pos,lemma",
             tokenize_no_ssplit=True,
             use_gpu=False,
             logging_level="WARN",

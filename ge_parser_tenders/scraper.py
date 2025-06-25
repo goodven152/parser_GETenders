@@ -373,7 +373,9 @@ def scrape_tenders(max_pages: int | None = None, *, headless: bool = True, setti
                         links_info.append((url, link.text.strip()))
                     # 2) параллельная обработка
                     hits_found = False
-                    max_threads = settings.max_download_threads or 1
+
+                    max_threads = 1  # временно отключаем многопоточность для стабильности
+
                     with ThreadPoolExecutor(max_workers=max_threads) as executor:
                         futures = {
                             executor.submit(
