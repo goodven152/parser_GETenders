@@ -59,6 +59,12 @@ class PDFTextExtractor:
             except Exception as e:
                 logging.error(f"Error extracting text: {e}")
                 self._text = ""
+        # --- лимит на необрезанный текст ---------------------------------
+        MAX_RAW_LEN = 120_000          # 120 тыс. символов ≈ 60-70 страниц
+        if len(self._text) > MAX_RAW_LEN:
+            logging.debug("truncate raw text %d ▶︎ %d chars", len(self._text), MAX_RAW_LEN)
+            self._text = self._text[:MAX_RAW_LEN]
+        # -----------------------------------------------------------------
         return self._text
 # --------------------------------------------------------------------------- #
 #                       helpers: pdf / excel  →  text                         #
@@ -157,6 +163,20 @@ def file_contains_keywords(
     поведение `keyword_tester.py`.
     """
     logging.info("  Сканируем %s test", file_path.name)
+    # ── пропускаем слишком большие файлы (например, тяжёлые PDF с картинками)
+    MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 МБ
+    try:
+        if file_path.stat().st_size > MAX_FILE_SIZE_BYTES:
+            logging.info(
+                "  Пропуск файла: %s (%.2f МБ > 5 МБ)",
+                file_path.name,
+                file_path.stat().st_size / 1024 / 1024,
+            )
+            return False
+    except FileNotFoundError:
+        # если файл внезапно исчез — воспринимаем как отсутствие ключевых слов
+        logging.warning("  Файл %s не найден при проверке размера", file_path)
+        return False
     try:
         text = extract_text(file_path)
     except Exception as exc:
